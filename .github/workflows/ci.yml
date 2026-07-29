@@ -154,6 +154,15 @@ jobs:
 
       - name: Build the TEE image
         id: build
+        # SOURCE_DATE_EPOCH must be in the *environment*, not only a --build-arg.
+        #
+        # The build arg is what the Dockerfile reads to clamp file mtimes. But BuildKit itself
+        # reads the environment variable, and that is what makes it (a) stamp the image config's
+        # `created` field deterministically instead of using wall-clock time, and (b) rewrite layer
+        # timestamps. Without it the config differs on every build even when every layer is
+        # byte-identical — which is exactly the mismatch this job caught.
+        env:
+          SOURCE_DATE_EPOCH: ${{ steps.epoch.outputs.value }}
         # --progress=plain keeps the full build output in the log. The default renderer collapses
         # completed steps, so a failure deep in the build shows as a truncated summary.
         run: |
@@ -163,6 +172,7 @@ jobs:
             --provenance=false \
             --load \
             --iidfile /tmp/iid.txt \
+            --metadata-file /tmp/meta.json \
             -t fidensur-extension:ci \
             ./extension
 
@@ -173,6 +183,8 @@ jobs:
           IID=$(cat /tmp/iid.txt)
           echo "digest=$IID" >> "$GITHUB_OUTPUT"
           echo "Image ID: $IID"
+          echo "--- buildx metadata ---"
+          cat /tmp/meta.json
 
       - name: Record the digest
         run: |
@@ -180,10 +192,23 @@ jobs:
           echo "${{ steps.build.outputs.digest }}" > /tmp/out/digest.txt
           cat /tmp/out/digest.txt
 
+      - name: Record layer diff IDs
+        # If the config digests still differ, this narrows it down immediately: identical layers
+        # with differing configs means a config field (created, env ordering, labels) is at fault;
+        # differing layers means the build itself is nondeterministic. Without this the failure
+        # says only "the hashes differ", which is the least useful form of the finding.
+        run: |
+          docker inspect fidensur-extension:ci \
+            --format '{{json .RootFS.Layers}}' > /tmp/out/layers.json
+          docker inspect fidensur-extension:ci \
+            --format '{{.Created}}' > /tmp/out/created.txt
+          echo "--- layer diff IDs ---"; cat /tmp/out/layers.json
+          echo "--- created ---"; cat /tmp/out/created.txt
+
       - uses: actions/upload-artifact@v4
         with:
           name: hash-${{ matrix.attempt }}
-          path: /tmp/out/digest.txt
+          path: /tmp/out/
 
   compare-digests:
     name: Digests match across machines
@@ -197,25 +222,44 @@ jobs:
 
       - name: Compare
         # This is the assertion the whole verification story depends on. If two clean machines
-        # building identical source produce different hashes, then "rebuild the published source
+        # building identical source produce different images, then "rebuild the published source
         # and check the hash matches" is not something a third party can actually do — and
         # Fidensur's central claim is false.
         run: |
           A=$(cat /tmp/hashes/hash-1/digest.txt)
           B=$(cat /tmp/hashes/hash-2/digest.txt)
 
-          echo "machine 1: $A"
-          echo "machine 2: $B"
+          echo "config digest, machine 1: $A"
+          echo "config digest, machine 2: $B"
 
-          if [ "$A" != "$B" ]; then
-            echo "::error::Build is NOT reproducible across machines."
-            echo "Two clean runners produced different images from identical source."
-            echo "A third party cannot verify the attested code hash, so the public-verifiability"
-            echo "claim does not hold. Investigate before deploying."
-            exit 1
+          LA=$(cat /tmp/hashes/hash-1/layers.json)
+          LB=$(cat /tmp/hashes/hash-2/layers.json)
+          CA=$(cat /tmp/hashes/hash-1/created.txt)
+          CB=$(cat /tmp/hashes/hash-2/created.txt)
+
+          if [ "$A" = "$B" ]; then
+            echo "Reproducible across machines: $A"
+            exit 0
           fi
 
-          echo "Reproducible: both machines produced $A"
+          echo "::error::Build is NOT reproducible across machines."
+          echo ""
+
+          # Separate the two failure modes, because they call for completely different fixes.
+          if [ "$LA" = "$LB" ]; then
+            echo "Layers are IDENTICAL, so the build itself is deterministic."
+            echo "The difference is in the image config. Created timestamps:"
+            echo "  machine 1: $CA"
+            echo "  machine 2: $CB"
+            echo "If those differ, SOURCE_DATE_EPOCH is not reaching BuildKit's environment."
+          else
+            echo "Layers DIFFER, so the build is genuinely nondeterministic."
+            echo "  machine 1: $LA"
+            echo "  machine 2: $LB"
+            echo "Look for embedded timestamps, build paths, or unpinned dependencies."
+          fi
+
+          exit 1
 
   frontend:
     name: Frontend
