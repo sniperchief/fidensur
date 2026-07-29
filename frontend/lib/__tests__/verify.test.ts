@@ -66,8 +66,14 @@ describe("TEE signature scheme, against Solidity ground truth", () => {
 
   it("uses the right bytes32 prefix", () => {
     // bytes32("TEE_ACTION_RESULT") — right-padded with zeros, not left-padded, and not hashed.
+    //
+    // "TEE_ACTION_RESULT" is 17 ASCII bytes (34 hex chars), so the padding is exactly 15 zero
+    // bytes (30 hex chars) for a total of 32 bytes. Asserting the width separately, because a
+    // hand-counted literal that is one character short still *looks* right and would leave the
+    // real check passing vacuously.
+    expect(TEE_ACTION_RESULT_PREFIX).toHaveLength(66); // "0x" + 64 hex chars
     expect(TEE_ACTION_RESULT_PREFIX).toBe(
-      "0x5445455f414354494f4e5f524553554c5400000000000000000000000000000",
+      "0x5445455f414354494f4e5f524553554c54" + "0".repeat(30),
     );
   });
 });
