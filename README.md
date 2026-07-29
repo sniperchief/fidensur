@@ -74,9 +74,41 @@ difference matters.
   A single local build would have produced a code hash and quiet confidence at every one of those
   stages. Two independent machines is what made the difference between a claim and a fact.
 
+- **Deployed and registered on Coston2.** The contract is live, the extension is registered, and
+  `setExtensionId()` has resolved. See [Live deployment](#live-deployment).
+
 **Unproven:**
 
-- The deploy scripts and registration tool have never touched a chain.
+- No confidential round has been computed end to end — that needs the TEE stack running, which is
+  blocked on Coston2 indexer credentials.
+- ECIES interoperability with go-ethereum (see [Known gaps](#known-gaps)).
+
+## Live deployment
+
+| | |
+| --- | --- |
+| Network | Coston2 (chain ID 114) |
+| Contract | [`0xF471169436d475917A63780EF13d9a4320c914b9`](https://coston2-explorer.flare.network/address/0xF471169436d475917A63780EF13d9a4320c914b9) |
+| Extension ID | 65818 (`0x1011a`) |
+| Attestation | Simulated — a real code hash needs a GCP Confidential Space VM |
+
+### A deployment hazard worth knowing about
+
+Registration is **not idempotent**, and the failure is quiet.
+
+During this deployment a wrapper timed out *after* its registration transaction had already landed.
+A retry then registered a second time, leaving the same contract bound to two valid extension IDs:
+65818 and 65819. `setExtensionId()` scans upward from `0x10000` and caches the **first** match,
+set-once — so the contract permanently uses 65818, while the tool reported 65819 and wrote that to
+`config/extension.env`.
+
+Nothing fails at that point. The mismatch surfaces much later as `MachineManager.TooMany()` during
+TEE registration, with nothing linking it back to the duplicate.
+
+`register-extension` now scans for an existing binding before registering, using the same
+first-match order as the contract so the two cannot disagree. If you hit this on an older
+deployment, the fix is to set `EXTENSION_ID` to whatever `extensionId()` returns on-chain — that
+value is authoritative and cannot be changed.
 - **ECIES compatibility with go-ethereum is unconfirmed.** `frontend/lib/ecies.ts` implements the
   scheme from a reading of go-ethereum's source, not a published spec. Its `selfTest()` proves
   internal consistency, which is *not* the same as agreeing with Go — two identically wrong

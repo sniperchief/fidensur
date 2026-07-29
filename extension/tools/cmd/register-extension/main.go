@@ -46,6 +46,10 @@ import (
 	"github.com/flare-foundation/go-flare-common/pkg/contracts/tee/ownerallowlist"
 )
 
+// firstPublicExtensionID is 0x10000. The registry reserves everything below it for system
+// extensions, and the contract's own scan starts here — so this scan must too.
+const firstPublicExtensionID = 0x10000
+
 func main() {
 	var (
 		rpcURL      = flag.String("rpc", "https://coston2-api.flare.network/ext/C/rpc", "chain RPC endpoint")
@@ -126,11 +130,29 @@ func main() {
 	}
 	opts.Context = ctx
 
-	extensionID, err := registerExtension(ctx, client, registry, opts, stateVerifier, sender)
+	// Registration is not idempotent: calling it twice for the same sender produces two valid
+	// extension IDs, both bound to the same contract. setExtensionId() then caches the *lowest*
+	// one, permanently, while a second run of this tool would report the highest — and the
+	// resulting config mismatch surfaces much later as MachineManager.TooMany(), a long way from
+	// its cause. So look before registering.
+	existing, err := findExistingRegistration(ctx, client, registry, sender)
 	if err != nil {
-		log.Fatalf("registering extension: %v", err)
+		log.Fatalf("scanning for an existing registration: %v", err)
 	}
-	log.Printf("registered with extension ID %s (0x%x)", extensionID, extensionID)
+
+	var extensionID *big.Int
+	if existing != nil {
+		log.Printf("this sender is ALREADY registered as extension ID %s (0x%x)", existing, existing)
+		log.Printf("reusing it instead of registering again — a second registration would be an")
+		log.Printf("orphan, since setExtensionId() caches the lowest matching ID permanently")
+		extensionID = existing
+	} else {
+		extensionID, err = registerExtension(ctx, client, registry, opts, stateVerifier, sender)
+		if err != nil {
+			log.Fatalf("registering extension: %v", err)
+		}
+		log.Printf("registered with extension ID %s (0x%x)", extensionID, extensionID)
+	}
 
 	if err := allowMachineOwner(ctx, client, registry, opts, extensionID, deployer); err != nil {
 		log.Fatalf("allowing TEE machine owner: %v", err)
@@ -146,6 +168,42 @@ func main() {
 	log.Printf("Next: call setExtensionId() on the Fidensur contract, then start the Docker stack.")
 	log.Printf("  cast send %s 'setExtensionId()' --rpc-url %s --private-key $DEPLOYMENT_PRIVATE_KEY",
 		sender.Hex(), *rpcURL)
+}
+
+// findExistingRegistration returns the lowest extension ID already bound to `sender`, or nil.
+//
+// Deliberately mirrors the contract's own scan in setExtensionId(): start at the first public ID
+// and return the *first* match. Matching that order is the point — the contract caches whatever it
+// finds first and can never change it, so any other answer here would disagree with the contract.
+func findExistingRegistration(
+	ctx context.Context,
+	client *ethclient.Client,
+	registry common.Address,
+	sender common.Address,
+) (*big.Int, error) {
+	manager, err := extensionmanager.NewExtensionManager(registry, client)
+	if err != nil {
+		return nil, fmt.Errorf("binding ExtensionManager: %w", err)
+	}
+
+	callOpts := &bind.CallOpts{Context: ctx}
+	next, err := manager.NextPublicExtensionId(callOpts)
+	if err != nil {
+		return nil, fmt.Errorf("reading nextPublicExtensionId: %w", err)
+	}
+
+	// Public extension IDs start at 0x10000; everything below is reserved for system extensions,
+	// so scanning from zero would burn 65,536 calls and find nothing.
+	for i := new(big.Int).SetUint64(firstPublicExtensionID); i.Cmp(next) < 0; i.Add(i, big.NewInt(1)) {
+		owner, err := manager.GetTeeExtensionInstructionsSender(callOpts, i)
+		if err != nil {
+			return nil, fmt.Errorf("reading sender for extension %s: %w", i, err)
+		}
+		if owner == sender {
+			return new(big.Int).Set(i), nil
+		}
+	}
+	return nil, nil
 }
 
 // registerExtension calls ExtensionManager.Register and reads the assigned ID from the event.

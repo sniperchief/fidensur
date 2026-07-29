@@ -69,23 +69,56 @@ echo
 
 echo "--- Step 1/3: deploying Fidensur.sol ---"
 
-DEPLOY_OUTPUT=$(forge create contracts/Fidensur.sol:Fidensur \
-  --rpc-url "$CHAIN_URL" \
-  --private-key "$DEPLOYMENT_PRIVATE_KEY" \
-  --broadcast \
-  --json \
-  --constructor-args "$TEE_MANAGER_ADDRESS" "$TEE_MANAGER_ADDRESS" "$INITIAL_OWNER")
+# Reuse an already-deployed contract when one is supplied.
+#
+# Deployment is the only irreversible step here, and steps 2 and 3 are the ones that tend to need
+# retrying. Without this, a failure in registration would force a fresh deploy — a second contract,
+# a second extension ID, and a MachineManager.TooMany() much later, a long way from the cause.
+if [[ -n "${FIDENSUR_ADDRESS:-}" ]]; then
+  echo "  reusing existing deployment: $FIDENSUR_ADDRESS"
+  echo "  (unset FIDENSUR_ADDRESS to deploy a new contract)"
+  echo
+else
+  # Deliberately NOT --json.
+  #
+  # `forge create --broadcast --json` terminates the shell before any error handling can run: the
+  # script died after printing "Step 1/3" with no output, no error, and no exit status to inspect.
+  # The plain output is a stable two-line format that greps cleanly, so the JSON buys nothing.
+  #
+  # stdout and stderr are captured together and the exit code handled by hand, because forge
+  # reports failures on stdout — which command substitution would otherwise swallow entirely.
+  set +e
+  DEPLOY_OUTPUT=$(forge create contracts/Fidensur.sol:Fidensur \
+    --rpc-url "$CHAIN_URL" \
+    --private-key "$DEPLOYMENT_PRIVATE_KEY" \
+    --broadcast \
+    --constructor-args "$TEE_MANAGER_ADDRESS" "$TEE_MANAGER_ADDRESS" "$INITIAL_OWNER" 2>&1)
+  DEPLOY_RC=$?
+  set -e
 
-FIDENSUR_ADDRESS=$(echo "$DEPLOY_OUTPUT" | grep -o '"deployedTo":"[^"]*"' | cut -d'"' -f4)
+  echo "$DEPLOY_OUTPUT"
 
-if [[ -z "$FIDENSUR_ADDRESS" ]]; then
-  echo "error: could not parse the deployed address from forge output:" >&2
-  echo "$DEPLOY_OUTPUT" >&2
-  exit 1
+  if [[ $DEPLOY_RC -ne 0 ]]; then
+    echo "" >&2
+    echo "error: forge create failed (exit $DEPLOY_RC)." >&2
+    echo "Common causes:" >&2
+    echo "  * DEPLOYMENT_PRIVATE_KEY malformed — must be 64 hex chars with no 0x prefix" >&2
+    echo "  * insufficient C2FLR — cast balance \$INITIAL_OWNER --rpc-url \$CHAIN_URL" >&2
+    echo "  * contracts do not compile — forge build" >&2
+    exit 1
+  fi
+
+  FIDENSUR_ADDRESS=$(echo "$DEPLOY_OUTPUT" | grep -oE 'Deployed to: 0x[0-9a-fA-F]{40}' | awk '{print $3}')
+
+  if [[ -z "$FIDENSUR_ADDRESS" ]]; then
+    echo "error: forge create reported success but no 'Deployed to:' line was found above." >&2
+    exit 1
+  fi
+
+  echo
+  echo "  deployed to: $FIDENSUR_ADDRESS"
+  echo
 fi
-
-echo "  deployed to: $FIDENSUR_ADDRESS"
-echo
 
 # ---------------------------------------------------------------------------
 # Step 2 — register as an FCC extension

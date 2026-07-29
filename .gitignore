@@ -33,3 +33,6 @@ frontend/.vercel
 Thumbs.db
 .idea/
 .vscode/
+
+# Built binary — reproducible from source, no reason to track
+extension/register-extension.exe
