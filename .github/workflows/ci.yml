@@ -131,12 +131,13 @@ jobs:
     name: Reproducible image (cross-machine)
     runs-on: ubuntu-latest
     strategy:
+      # Without this, the first failure cancels its sibling and the logs show one cancelled job and
+      # one failed job — which hides whether the failure was deterministic or a one-off.
+      fail-fast: false
       matrix:
         # Two independent runs. GitHub provisions a fresh VM for each job in the matrix, so these
         # are genuinely different machines — which is the property being tested.
         attempt: [1, 2]
-    outputs:
-      digest-1: ${{ steps.build.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -153,31 +154,31 @@ jobs:
 
       - name: Build the TEE image
         id: build
+        # --progress=plain keeps the full build output in the log. The default renderer collapses
+        # completed steps, so a failure deep in the build shows as a truncated summary.
         run: |
           docker build \
+            --progress=plain \
             --build-arg SOURCE_DATE_EPOCH=${{ steps.epoch.outputs.value }} \
             --provenance=false \
-            --output type=docker,dest=/tmp/image.tar \
+            --load \
+            --iidfile /tmp/iid.txt \
             -t fidensur-extension:ci \
             ./extension
 
-          # The image digest is what a Confidential Space VM measures and what gets whitelisted
-          # on-chain by allow-tee-version.
-          DIGEST=$(sha256sum /tmp/image.tar | cut -d' ' -f1)
-          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
-          echo "Image tarball SHA-256: $DIGEST"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: digest-${{ matrix.attempt }}
-          path: /tmp/image.tar
-          retention-days: 1
-          compression-level: 0
+          # The image ID is the digest of the image config, which in turn commits to every layer.
+          # That is the right thing to compare: hashing an exported tarball would also fold in tar
+          # member ordering and archive metadata, which can differ between runs without the image
+          # itself differing — a false negative on reproducibility.
+          IID=$(cat /tmp/iid.txt)
+          echo "digest=$IID" >> "$GITHUB_OUTPUT"
+          echo "Image ID: $IID"
 
       - name: Record the digest
         run: |
           mkdir -p /tmp/out
           echo "${{ steps.build.outputs.digest }}" > /tmp/out/digest.txt
+          cat /tmp/out/digest.txt
 
       - uses: actions/upload-artifact@v4
         with:

@@ -22,25 +22,23 @@ ENV SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH
 
 WORKDIR /build
 
-# apt normally resolves to whatever the mirror serves at build time, so two builds days apart
-# install different bytes. Redirect apt at snapshot.debian.org keyed on SOURCE_DATE_EPOCH so every
-# build installs the exact package set that existed at that instant.
-# Taken from https://github.com/reproducible-containers/repro-sources-list.sh
-RUN \
-  --mount=type=cache,target=/var/cache/apt,sharing=locked \
-  --mount=type=cache,target=/var/lib/apt,sharing=locked \
-  if [ "${SOURCE_DATE_EPOCH:-0}" -gt 0 ] 2>/dev/null; then \
-    snapshot="$(/bin/bash -euc "printf \"%(%Y%m%dT%H%M%SZ)T\n\" \"${SOURCE_DATE_EPOCH}\"")" && \
-    sed -i -e '/Types: deb/ a\Snapshot: true' /etc/apt/sources.list.d/debian.sources && \
-    rm -f /etc/apt/apt.conf.d/docker-clean && \
-    echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' >/etc/apt/apt.conf.d/keep-cache && \
-    apt-get install --update --snapshot "${snapshot}" -o Acquire::Check-Valid-Until=false \
-      -o Acquire::https::Verify-Peer=false -y ca-certificates && \
-    rm -rf /var/log/* /var/cache/ldconfig/aux-cache; \
-  else \
-    apt-get update && apt-get install -y ca-certificates && \
-    rm -rf /var/log/* /var/cache/ldconfig/aux-cache; \
-  fi
+# No apt install step, deliberately.
+#
+# The Flare scaffold installs ca-certificates through snapshot.debian.org, keyed on
+# SOURCE_DATE_EPOCH, so that two builds days apart get the same package bytes. That is the right
+# instinct when you genuinely need to install something — but we do not.
+#
+# The only thing the final image takes from Debian is /etc/ssl/certs/ca-certificates.crt, and the
+# golang:*-trixie base image already ships it. Since the base image is pinned **by digest** below,
+# that file is already byte-identical on every build, on every machine, forever.
+#
+# Removing the apt step therefore makes the build *more* reproducible, not less:
+#
+#   - no dependency on snapshot.debian.org being reachable, or on a snapshot existing for the
+#     commit's timestamp (it lags by a day or more, so a fresh commit can legitimately 404);
+#   - no per-commit variation in the installed package set, which the keyed-snapshot approach
+#     actually introduces — every commit would pull a slightly different Debian;
+#   - one less network fetch that can fail in CI for reasons unrelated to our source.
 
 # Manifests first, so the dependency download layer is cached independently of source edits.
 # go.sum pins every dependency by hash; `go mod verify` checks them before anything is compiled.
