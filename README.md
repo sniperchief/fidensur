@@ -31,8 +31,9 @@ difference matters.
 | Browser verifier ↔ Solidity agreement | **Verified** | TypeScript reproduces the Solidity signature chain and recovers the same signer |
 | `frontend/app/verify/[round]/page.tsx` | Complete | Type-checks clean |
 | Organization console / recipient portal UI | Not written | — |
-| `docker-compose.yaml`, `extension/Dockerfile` | Written | ⚠️ **Never built locally** — built and hash-compared in CI instead |
-| `.github/workflows/ci.yml` | Complete | Runs everything above plus a two-machine reproducible build |
+| `extension/Dockerfile` | Builds successfully in CI | ⚠️ **Not yet reproducible across machines** — see below |
+| `docker-compose.yaml` | Written | ⚠️ Never run |
+| `.github/workflows/ci.yml` | Complete | 7 of 8 jobs green; `compare-digests` failing |
 
 ### What is and is not proven
 
@@ -52,11 +53,19 @@ difference matters.
   still check a signature. The tests confirm the two land on the same signer, step by step —
   otherwise the duplication would just be duplication.
 
-**Asserted but not demonstrated:**
+**Known to be false, or unproven:**
 
-- The Docker image has not been built locally, so **no code hash has been observed** on the
-  development machine. CI builds it on two independent runners and fails if the hashes differ;
-  until that job has run green, reproducibility is a claim about the Dockerfile.
+- **Cross-machine reproducibility does not hold yet.** This is a finding, not an unknown. CI builds
+  the image on two independently provisioned runners and compares: both builds succeed, but they
+  produced **different image config digests**. The cause appears to be that `SOURCE_DATE_EPOCH`
+  reached the Dockerfile as a build arg but not BuildKit's own environment, so the image `created`
+  field was stamped from wall-clock time. A fix is in flight; until `compare-digests` reports green,
+  **treat the reproducibility claim as unsupported**.
+
+  This is the check working as intended. A single local build would have produced a code hash and
+  an unjustified sense of confidence — the whole reason for two independent machines is to catch
+  exactly this.
+
 - The deploy scripts and registration tool have never touched a chain.
 - **ECIES compatibility with go-ethereum is unconfirmed.** `frontend/lib/ecies.ts` implements the
   scheme from a reading of go-ethereum's source, not a published spec. Its `selfTest()` proves

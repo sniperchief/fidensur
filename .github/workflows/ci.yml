@@ -166,44 +166,49 @@ jobs:
         # --progress=plain keeps the full build output in the log. The default renderer collapses
         # completed steps, so a failure deep in the build shows as a truncated summary.
         run: |
+          # rewrite-timestamp=true is the load-bearing flag.
+          #
+          # SOURCE_DATE_EPOCH in the environment only makes BuildKit stamp the image *config*.
+          # Normalizing the mtimes recorded in the layer tars requires this output option. Without
+          # it, every layer we create carries build-time timestamps: a previous run of this job
+          # showed the 13 base layers matching byte-for-byte while all three of our own layers
+          # differed -- including the bare `WORKDIR /app` directory, which has no content that
+          # could differ. That is metadata, not nondeterministic output.
+          #
+          # The OCI exporter is used rather than --load because it supports rewrite-timestamp and
+          # because it yields a manifest digest directly, without a round trip through the local
+          # daemon that could renormalize anything.
           docker build \
             --progress=plain \
             --build-arg SOURCE_DATE_EPOCH=${{ steps.epoch.outputs.value }} \
             --provenance=false \
-            --load \
-            --iidfile /tmp/iid.txt \
-            --metadata-file /tmp/meta.json \
+            --sbom=false \
+            --output type=oci,dest=/tmp/image.tar,rewrite-timestamp=true \
             -t fidensur-extension:ci \
             ./extension
 
-          # The image ID is the digest of the image config, which in turn commits to every layer.
-          # That is the right thing to compare: hashing an exported tarball would also fold in tar
-          # member ordering and archive metadata, which can differ between runs without the image
-          # itself differing — a false negative on reproducibility.
-          IID=$(cat /tmp/iid.txt)
-          echo "digest=$IID" >> "$GITHUB_OUTPUT"
-          echo "Image ID: $IID"
-          echo "--- buildx metadata ---"
-          cat /tmp/meta.json
-
-      - name: Record the digest
+      - name: Record digest, layers, and created timestamp
         run: |
-          mkdir -p /tmp/out
-          echo "${{ steps.build.outputs.digest }}" > /tmp/out/digest.txt
-          cat /tmp/out/digest.txt
+          mkdir -p /tmp/out /tmp/oci
+          tar -xf /tmp/image.tar -C /tmp/oci
 
-      - name: Record layer diff IDs
-        # If the config digests still differ, this narrows it down immediately: identical layers
-        # with differing configs means a config field (created, env ordering, labels) is at fault;
-        # differing layers means the build itself is nondeterministic. Without this the failure
-        # says only "the hashes differ", which is the least useful form of the finding.
-        run: |
-          docker inspect fidensur-extension:ci \
-            --format '{{json .RootFS.Layers}}' > /tmp/out/layers.json
-          docker inspect fidensur-extension:ci \
-            --format '{{.Created}}' > /tmp/out/created.txt
-          echo "--- layer diff IDs ---"; cat /tmp/out/layers.json
-          echo "--- created ---"; cat /tmp/out/created.txt
+          blob() { echo "/tmp/oci/blobs/sha256/${1#sha256:}"; }
+
+          # The manifest digest is the image digest -- what a registry serves it under, and the
+          # thing a third party would compare against a published value. Hashing the exported
+          # tarball instead would fold in tar member ordering and archive metadata, which can
+          # differ between runs without the image differing: a false negative.
+          MANIFEST=$(jq -r '.manifests[0].digest' /tmp/oci/index.json)
+          echo "$MANIFEST" > /tmp/out/digest.txt
+
+          jq -c '[.layers[].digest]' "$(blob "$MANIFEST")" > /tmp/out/layers.json
+
+          CONFIG=$(jq -r '.config.digest' "$(blob "$MANIFEST")")
+          jq -r '.created // "unset"' "$(blob "$CONFIG")" > /tmp/out/created.txt
+
+          echo "--- image digest ---"; cat /tmp/out/digest.txt
+          echo "--- layers ---";       cat /tmp/out/layers.json
+          echo "--- created ---";      cat /tmp/out/created.txt
 
       - uses: actions/upload-artifact@v4
         with:
@@ -229,8 +234,8 @@ jobs:
           A=$(cat /tmp/hashes/hash-1/digest.txt)
           B=$(cat /tmp/hashes/hash-2/digest.txt)
 
-          echo "config digest, machine 1: $A"
-          echo "config digest, machine 2: $B"
+          echo "image digest, machine 1: $A"
+          echo "image digest, machine 2: $B"
 
           LA=$(cat /tmp/hashes/hash-1/layers.json)
           LB=$(cat /tmp/hashes/hash-2/layers.json)
