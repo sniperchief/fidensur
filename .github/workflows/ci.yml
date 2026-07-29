@@ -1,0 +1,244 @@
+name: CI
+
+# Runs the whole verification story on clean machines.
+#
+# Two of these jobs do something a developer laptop cannot. `reproducible-build` builds the TEE
+# image twice on two independently provisioned runners and requires the code hashes to be
+# identical — that is the *cross-machine* determinism Fidensur's public-verifiability claim rests
+# on, and building twice on one machine only ever proves the weaker same-machine version.
+# `cross-implementation` re-derives the Solidity vectors and confirms the Go engine still matches
+# them, so a drift between the two Merkle implementations fails here rather than in production.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  FOUNDRY_PROFILE: ci
+
+jobs:
+  contracts:
+    name: Contracts (Forge)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Build
+        run: forge build --sizes
+
+      - name: Test
+        run: forge test -vv
+
+      - name: Gas report
+        run: forge test --gas-report > gas-report.txt || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gas-report
+          path: gas-report.txt
+
+  extension:
+    name: Extension (Go)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache-dependency-path: extension/go.sum
+
+      - name: Verify dependencies are pinned
+        working-directory: extension
+        # go.sum pins every dependency by hash. The measured code hash is only meaningful if the
+        # inputs to the build are fixed, so an unverifiable module graph invalidates the whole
+        # attestation argument.
+        run: go mod verify
+
+      - name: Vet
+        working-directory: extension
+        run: go vet ./...
+
+      - name: Test
+        working-directory: extension
+        run: go test ./... -v
+
+      - name: Race detector
+        working-directory: extension
+        # Handler invocations are serialized by the container contract, but the async COMPUTE path
+        # runs on its own goroutine and touches the same state. That is exactly the shape of bug
+        # -race exists to find.
+        run: go test ./... -race
+
+  identifier-sync:
+    name: OPType/OPCommand sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check identifiers agree across all three layers
+        # A drift compiles cleanly in both Solidity and Go and fails at runtime as an HTTP 501 from
+        # inside a TEE. There is no other automated signal for it.
+        run: bash scripts/check-op-sync.sh
+
+  cross-implementation:
+    name: Go matches Solidity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: foundry-rs/foundry-toolchain@v1
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache-dependency-path: extension/go.sum
+
+      - name: Regenerate vectors from the Solidity implementation
+        run: |
+          forge test --match-test test_emitVectors -vv > /tmp/vectors.txt
+          echo "--- Solidity output ---"
+          cat /tmp/vectors.txt
+
+      - name: Confirm the committed vectors still match Solidity
+        # Catches a Solidity change that silently alters the leaf or node encoding. Without this,
+        # the committed vectors could drift from the contract while the Go tests kept passing
+        # against stale ground truth.
+        run: |
+          for hash in $(grep -oE '0x[0-9a-f]{64}' extension/internal/engine/testdata/merkle_vectors.json); do
+            if ! grep -q "$hash" /tmp/vectors.txt; then
+              echo "::error::committed vector $hash is no longer produced by the Solidity implementation"
+              echo "Regenerate: forge test --match-test test_emitVectors -vv"
+              exit 1
+            fi
+          done
+          echo "All committed vectors still match the Solidity implementation."
+
+      - name: Confirm the Go engine reproduces them
+        working-directory: extension
+        run: go test ./internal/engine/ -run 'MatchesSolidity' -v
+
+  reproducible-build:
+    name: Reproducible image (cross-machine)
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # Two independent runs. GitHub provisions a fresh VM for each job in the matrix, so these
+        # are genuinely different machines — which is the property being tested.
+        attempt: [1, 2]
+    outputs:
+      digest-1: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # SOURCE_DATE_EPOCH comes from the commit timestamp
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Derive SOURCE_DATE_EPOCH from the commit
+        id: epoch
+        # Must come from the commit, never from the clock. A wall-clock timestamp would give every
+        # build a different code hash, forcing TEE re-registration after every rebuild and making
+        # the published hash unverifiable by anyone else.
+        run: echo "value=$(git log -1 --format=%ct)" >> "$GITHUB_OUTPUT"
+
+      - name: Build the TEE image
+        id: build
+        run: |
+          docker build \
+            --build-arg SOURCE_DATE_EPOCH=${{ steps.epoch.outputs.value }} \
+            --provenance=false \
+            --output type=docker,dest=/tmp/image.tar \
+            -t fidensur-extension:ci \
+            ./extension
+
+          # The image digest is what a Confidential Space VM measures and what gets whitelisted
+          # on-chain by allow-tee-version.
+          DIGEST=$(sha256sum /tmp/image.tar | cut -d' ' -f1)
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+          echo "Image tarball SHA-256: $DIGEST"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: digest-${{ matrix.attempt }}
+          path: /tmp/image.tar
+          retention-days: 1
+          compression-level: 0
+
+      - name: Record the digest
+        run: |
+          mkdir -p /tmp/out
+          echo "${{ steps.build.outputs.digest }}" > /tmp/out/digest.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hash-${{ matrix.attempt }}
+          path: /tmp/out/digest.txt
+
+  compare-digests:
+    name: Digests match across machines
+    runs-on: ubuntu-latest
+    needs: reproducible-build
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: hash-*
+          path: /tmp/hashes
+
+      - name: Compare
+        # This is the assertion the whole verification story depends on. If two clean machines
+        # building identical source produce different hashes, then "rebuild the published source
+        # and check the hash matches" is not something a third party can actually do — and
+        # Fidensur's central claim is false.
+        run: |
+          A=$(cat /tmp/hashes/hash-1/digest.txt)
+          B=$(cat /tmp/hashes/hash-2/digest.txt)
+
+          echo "machine 1: $A"
+          echo "machine 2: $B"
+
+          if [ "$A" != "$B" ]; then
+            echo "::error::Build is NOT reproducible across machines."
+            echo "Two clean runners produced different images from identical source."
+            echo "A third party cannot verify the attested code hash, so the public-verifiability"
+            echo "claim does not hold. Investigate before deploying."
+            exit 1
+          fi
+
+          echo "Reproducible: both machines produced $A"
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install
+        working-directory: frontend
+        run: npm ci || npm install
+
+      - name: Type-check
+        working-directory: frontend
+        run: npx tsc --noEmit
+
+      - name: Test
+        working-directory: frontend
+        # verify.test.ts checks the browser-side signature verifier against vectors generated by
+        # the Solidity implementation. The two are deliberately independent; this is where they
+        # get compared.
+        run: npx vitest run

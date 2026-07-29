@@ -1,0 +1,99 @@
+# Fidensur FCC stack.
+#
+# Three services, matching the topology every Flare FCC deployment uses:
+#
+#   extension-tee  your code plus tee-node, in one process (the Go single-process topology)
+#   ext-proxy      watches the chain for instructions, delivers them, submits results back
+#   redis          the proxy's queue
+#
+# The proxy's external API (container 6664 → host 6674) must be reachable from the internet for a
+# real deployment; put an HTTPS tunnel in front of it and set EXT_PROXY_URL to the public URL
+# *before* running pre-build, because pre-build, post-build and test all read it.
+#
+# Security: host port 6674 exposes the proxy HTTP API. Anyone with the URL can call it. Testnet
+# only, and stop the tunnel when you are done.
+
+services:
+  redis:
+    image: redis:7-alpine
+    command: redis-server --save "" --appendonly no
+    ports:
+      - "${REDIS_BIND:-127.0.0.1:6382}:6379"
+    tmpfs:
+      - /data
+
+  ext-proxy:
+    image: ${REGISTRY:-local}/tee-proxy
+    volumes:
+      - ./config/proxy/extension_proxy.docker.toml:/app/config/config.toml:ro
+    environment:
+      - PROXY_PRIVATE_KEY=${PROXY_PRIVATE_KEY:?PROXY_PRIVATE_KEY must be set}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${EXT_PROXY_INTERNAL_BIND:-0.0.0.0:6673}:6663"
+      - "${EXT_PROXY_EXTERNAL_BIND:-0.0.0.0:6674}:6664"
+    depends_on:
+      - redis
+
+  extension-tee:
+    build:
+      context: ./extension
+      dockerfile: Dockerfile
+      args:
+        # Derived from the last commit by start-services.sh. Two builds of the same commit must
+        # produce the same code hash, or the on-chain allowlist stops meaning anything.
+        SOURCE_DATE_EPOCH: ${SOURCE_DATE_EPOCH:-0}
+    env_file:
+      # Written by pre-build.sh: EXTENSION_ID and INSTRUCTION_SENDER. Absent before the first
+      # deploy, which is why it is optional.
+      - path: ./config/extension.env
+        required: false
+    environment:
+      # MODE=1 is simulated attestation. A real Confidential Space deploy needs MODE=0 *and*
+      # SIMULATED_TEE=false; mismatching them fails with "code hashes do not match".
+      - MODE=${MODE:-1}
+      - SIMULATED_TEE=${SIMULATED_TEE:-true}
+
+      # Chain id the node binds signatures to. Must match the proxy and the chain itself, because
+      # it is inside the domain-separated payload the node signs — get it wrong and every
+      # signature fails verification on-chain with no other symptom.
+      # local devnet = 31337, coston = 16, coston2 = 114.
+      - CHAIN_ID=${CHAIN_ID:-114}
+
+      - INITIAL_OWNER=${INITIAL_OWNER:?INITIAL_OWNER must be set}
+
+      # Governance signer set the node signs with. set-governance registers the same values
+      # on-chain from the same variables, so the two cannot drift; if they do, TEE registration
+      # reverts with InvalidGovernanceHash.
+      - GOVERNANCE_SIGNERS=${GOVERNANCE_SIGNERS:-${INITIAL_OWNER}}
+      - GOVERNANCE_THRESHOLD=${GOVERNANCE_THRESHOLD:-1}
+
+      - PROXY_URL=http://ext-proxy:6663
+      - CONFIG_PORT=5501
+      - SIGN_PORT=7701
+      - EXTENSION_PORT=7702
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+
+      # The Fidensur deployment this engine serves. Set by pre-build.sh via config/extension.env.
+      # The engine refuses to start without it: an engine that cannot tell which deployment it
+      # serves cannot reject a policy encrypted for a different one.
+      - FIDENSUR_CONTRACT=${INSTRUCTION_SENDER:-}
+    depends_on:
+      - ext-proxy
+
+  # Read-only sidecar that renders instruction and result bytes as JSON for the verification
+  # explorer. Runs outside the enclave and holds no keys — it decodes only what is already public,
+  # and reports encrypted payloads as shape rather than content.
+  types-server:
+    build:
+      context: ./extension
+      dockerfile: Dockerfile.types-server
+    environment:
+      - TYPES_SERVER_PORT=8100
+    ports:
+      - "${TYPES_SERVER_BIND:-127.0.0.1:8100}:8100"
+
+networks:
+  default:
+    name: ${COMPOSE_NETWORK:-fidensur_default}

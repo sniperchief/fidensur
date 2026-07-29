@@ -1,0 +1,50 @@
+{
+  "note": "Ground truth produced by the Solidity implementation. Regenerate with: forge test --match-test test_emitVectors -vv",
+  "why": "The Go engine builds Merkle trees; the Solidity library verifies the proofs on-chain. If the two ever disagree, every claim in a round fails and the symptom looks like a bad proof rather than a version skew. These vectors make that disagreement a failing Go test instead of a production incident.",
+  "source": "test/GenerateVectors.t.sol",
+  "leafRule": "leaf = keccak256(keccak256(abi.encode(roundId, index, recipient, amount)))",
+  "tableRule": "For root vectors, recipient i is address(0x1000 + i) and amount is (i+1) * 1e18.",
+
+  "leaves": [
+    {
+      "roundId": "1",
+      "index": 0,
+      "recipient": "0x1000000000000000000000000000000000000001",
+      "amount": "1000000000000000000",
+      "leaf": "0x53c2e306c5ea71236d7104bdc117c61928a71b7d2a3fbdc50a8421e14b243de5"
+    },
+    {
+      "roundId": "1",
+      "index": 1,
+      "recipient": "0x1000000000000000000000000000000000000002",
+      "amount": "2500000000000000000",
+      "leaf": "0x976d17b430ac4e1d49bf4dc4849e54d4b0dc844140d5a9fd474a87ad70a6fa92"
+    },
+    {
+      "roundId": "42",
+      "index": 7,
+      "recipient": "0x00000000000000000000000000000000000000AB",
+      "amount": "1",
+      "leaf": "0x014fab4c764df335b8e61b28bebe8b34a6bc3996ad9c30b85a6edd3a378e2c55"
+    },
+    {
+      "roundId": "0",
+      "index": 0,
+      "recipient": "0xFFfFfFffFFfffFFfFFfFFFFFffFFFffffFfFFFfF",
+      "amount": "0",
+      "leaf": "0x44651f536c419fe0ac9ab6bf1c044bd5d4df21cf548990fbb01d16fc7523269e"
+    }
+  ],
+
+  "roots": [
+    { "roundId": "1", "size": 1,  "root": "0x16e7c953cf5c3f0fe666df532537f79f191d3d4b544c6960abc70141cb25b22b" },
+    { "roundId": "1", "size": 2,  "root": "0x15e62713dc659918a9d5f999e69dd9342ad0f542e59bfee5e16da25b1ed87d9a" },
+    { "roundId": "1", "size": 3,  "root": "0x396621a1690734ad04744b1e19d19bb76afdc64796fe3ae8adcdbec8487ad6d3" },
+    { "roundId": "1", "size": 4,  "root": "0x0f38f75587c87c8d69fb835866fe202d82d326e437b5df03ef135b8ce2f4ae1b" },
+    { "roundId": "1", "size": 5,  "root": "0x81ba26d33a6eeaa57f2962184d5e871083b766cf92ca616e5750c92932121134" },
+    { "roundId": "1", "size": 6,  "root": "0x83c61d9806af300eaa8512740c1bf180b62c2073e4990ee72aa41375c811552e" },
+    { "roundId": "1", "size": 7,  "root": "0x7075ff6fd6adb51c34e28643cfbd0ced75bb3dee06ebbe72d8d046bd7ab0f376" },
+    { "roundId": "1", "size": 8,  "root": "0xe1edb1169604b4ead26004662e1dda0e264c621a7fee0c2aa5c610cf19365d63" },
+    { "roundId": "9", "size": 17, "root": "0xae906385e0a84b04018ed21eb491d234b09c75f5623ca9f24a3c4355a336476e" }
+  ]
+}

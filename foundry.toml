@@ -1,0 +1,35 @@
+[profile.default]
+src = "contracts"
+test = "test"
+out = "out"
+libs = ["lib"]
+solc_version = "0.8.27"
+optimizer = true
+optimizer_runs = 200
+via_ir = false
+evm_version = "cancun"
+
+# Build fails only on hard errors; lint notes stay advisory.
+deny = "never"
+
+# Coston2 is the target network. Chain id is pinned here so `forge test` exercises the same
+# chainid that TeeResultVerifier's domain separation binds to on the live deployment.
+[profile.default.fuzz]
+runs = 256
+
+[profile.ci]
+fuzz = { runs = 2000 }
+verbosity = 3
+
+[rpc_endpoints]
+coston2 = "https://coston2-api.flare.network/ext/C/rpc"
+coston = "https://coston-api.flare.network/ext/C/rpc"
+
+[etherscan]
+coston2 = { key = "any", url = "https://coston2-explorer.flare.network/api", chain = 114 }
+
+[fmt]
+line_length = 110
+tab_width = 4
+bracket_spacing = true
+int_types = "long"

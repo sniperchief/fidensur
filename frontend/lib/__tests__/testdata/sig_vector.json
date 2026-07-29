@@ -1,0 +1,26 @@
+{
+  "note": "Ground truth produced by the Solidity implementation. Regenerate with: forge test --match-test test_emitSigVector -vv",
+  "why": "frontend/lib/verify.ts deliberately reimplements TeeResultVerifier.sol rather than calling it, so that two independent implementations agreeing is real evidence. That only helps if they are actually compared — this vector is the comparison.",
+  "source": "test/GenerateSigVectors.t.sol",
+  "chainId": 31337,
+  "signer": "0xe05fcC23807536bEe418f142D19fa0d21BB0cfF7",
+  "data": "0x00000000000000000000000000000000000000000000000000000000000000c000000000000000000000000000000000000000000000000000000000000000076ae218130df0ffe668b74207d0f9f3abd5a012d6efd67f710070d777418fbd31eae0dae2a24253eab863430e1e3b1b290d409993bc6495b489bc0e2199281ea400000000000000000000000000000000000000000000000000000000075bcd15000000000000000000000000000000000000000000000000000000000000002a302e312e30000000000000000000000000000000000000000000000000000000",
+  "actionId": "0x8ca6fb71d1376a1e26d3dd59a89b934347176880ac8fc1f22205f32106b1c351",
+  "submissionTag": "submit",
+  "status": 1,
+  "dataHash": "0xb205c61015b01a24fce6b0220773bfdef11a4c77759a84ac5736ae4910f63c79",
+  "resultHash": "0x4acd41f00f9d055a5ad0a1b979637fd3e6b620253b296480b7f486e93471dc87",
+  "payloadHash": "0xf8dfc1cdaae73244fd6add47201ab20f6ab37372be64f333a77eda83f119ec43",
+  "eip191Digest": "0x9c652e18af63fc9c241b6e406d5aa95c7d853141ebc92d2a0c8b934d1e8c7120",
+  "signature": "0x1931e0c3e9582d3c59e59ba08b54da99f5f4ffed0e0d94e11b9b9e12bf16bacd41577b0ca4c5014c42c2338137f162b0b010b8c530e43a3b189ff2d66274e4a01b",
+
+  "decodedResult": {
+    "contractAddr": "0x00000000000000000000000000000000000000C0",
+    "roundId": "7",
+    "policyCommitment": "keccak256('policy-commitment')",
+    "merkleRoot": "keccak256('merkle-root')",
+    "totalAllocated": "123456789",
+    "recipientCount": 42,
+    "engineVersion": "bytes32('0.1.0')"
+  }
+}
