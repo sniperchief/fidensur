@@ -145,6 +145,14 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
+      - name: Toolchain versions
+        # rewrite-timestamp needs BuildKit >= 0.13. When an exporter option is unsupported the
+        # error names the option but not the version that would provide it, so record both here
+        # rather than inferring them from a failure later.
+        run: |
+          docker buildx version
+          docker buildx inspect --bootstrap | grep -iE 'buildkit|driver' || true
+
       - name: Derive SOURCE_DATE_EPOCH from the commit
         id: epoch
         # Must come from the commit, never from the clock. A wall-clock timestamp would give every
