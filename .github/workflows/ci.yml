@@ -144,6 +144,12 @@ jobs:
           fetch-depth: 0 # SOURCE_DATE_EPOCH comes from the commit timestamp
 
       - uses: docker/setup-buildx-action@v3
+        id: buildx
+        with:
+          # docker-container is what supports the OCI exporter and rewrite-timestamp. The classic
+          # "docker" driver rejects both, and the build below targets this builder explicitly
+          # rather than relying on it being the ambient default.
+          driver: docker-container
 
       - name: Toolchain versions
         # rewrite-timestamp needs BuildKit >= 0.13. When an exporter option is unsupported the
@@ -186,7 +192,13 @@ jobs:
           # The OCI exporter is used rather than --load because it supports rewrite-timestamp and
           # because it yields a manifest digest directly, without a round trip through the local
           # daemon that could renormalize anything.
-          docker build \
+          #
+          # `docker buildx build --builder <name>`, not plain `docker build`. Even with a
+          # docker-container builder configured, `docker build` can still route to the classic
+          # docker driver -- which rejects the OCI exporter outright ("OCI exporter is not
+          # supported for the docker driver"). Naming the builder removes the ambiguity.
+          docker buildx build \
+            --builder ${{ steps.buildx.outputs.name }} \
             --progress=plain \
             --build-arg SOURCE_DATE_EPOCH=${{ steps.epoch.outputs.value }} \
             --provenance=false \
