@@ -31,9 +31,9 @@ difference matters.
 | Browser verifier ↔ Solidity agreement | **Verified** | TypeScript reproduces the Solidity signature chain and recovers the same signer |
 | `frontend/app/verify/[round]/page.tsx` | Complete | Type-checks clean |
 | Organization console / recipient portal UI | Not written | — |
-| `extension/Dockerfile` | Builds successfully in CI | ⚠️ **Not yet reproducible across machines** — see below |
+| `extension/Dockerfile` | Complete | **Reproducible across two independent CI runners** |
 | `docker-compose.yaml` | Written | ⚠️ Never run |
-| `.github/workflows/ci.yml` | Complete | 7 of 8 jobs green; `compare-digests` failing |
+| `.github/workflows/ci.yml` | Complete | **All 8 jobs green** |
 
 ### What is and is not proven
 
@@ -53,18 +53,28 @@ difference matters.
   still check a signature. The tests confirm the two land on the same signer, step by step —
   otherwise the duplication would just be duplication.
 
-**Known to be false, or unproven:**
+- **Cross-machine reproducibility holds.** CI builds the TEE image on two independently provisioned
+  runners and compares manifest digests. They match. This is the property Fidensur's public
+  verifiability rests on: a third party can rebuild the published source and confirm the attested
+  code hash for themselves.
 
-- **Cross-machine reproducibility does not hold yet.** This is a finding, not an unknown. CI builds
-  the image on two independently provisioned runners and compares: both builds succeed, but they
-  produced **different image config digests**. The cause appears to be that `SOURCE_DATE_EPOCH`
-  reached the Dockerfile as a build arg but not BuildKit's own environment, so the image `created`
-  field was stamped from wall-clock time. A fix is in flight; until `compare-digests` reports green,
-  **treat the reproducibility claim as unsupported**.
+  Getting there took three failures worth recording, because each was a real defect rather than a
+  flaky pipeline:
 
-  This is the check working as intended. A single local build would have produced a code hash and
-  an unjustified sense of confidence — the whole reason for two independent machines is to catch
-  exactly this.
+  1. The build pinned apt to `snapshot.debian.org` keyed on `SOURCE_DATE_EPOCH` — but that value is
+     the current commit's timestamp, and the snapshot service lags real time, so a fresh commit had
+     no snapshot to resolve. The step was also unnecessary: the only file taken from Debian is
+     `ca-certificates.crt`, which the digest-pinned base image already provides.
+  2. `SOURCE_DATE_EPOCH` was passed only as a `--build-arg`. That clamps file mtimes inside the
+     Dockerfile, but BuildKit reads the *environment* variable, and normalizing mtimes recorded in
+     layer tars additionally needs `rewrite-timestamp=true` on the output.
+  3. Plain `docker build` routed to the classic docker driver, which rejects the OCI exporter
+     outright. The build now names the `docker-container` builder explicitly.
+
+  A single local build would have produced a code hash and quiet confidence at every one of those
+  stages. Two independent machines is what made the difference between a claim and a fact.
+
+**Unproven:**
 
 - The deploy scripts and registration tool have never touched a chain.
 - **ECIES compatibility with go-ethereum is unconfirmed.** `frontend/lib/ecies.ts` implements the
