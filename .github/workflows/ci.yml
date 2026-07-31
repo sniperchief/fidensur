@@ -88,6 +88,97 @@ jobs:
         # inside a TEE. There is no other automated signal for it.
         run: bash scripts/check-op-sync.sh
 
+  compose-valid:
+    name: docker-compose resolves
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Every service's build context resolves
+        # This exists because it did not, and a service was added referencing a Dockerfile that was
+        # never written. Nothing caught it: the file is only touched by `docker compose up`, so the
+        # failure would have surfaced on the deployment host rather than here.
+        #
+        # `config` resolves every service definition and build context without building or starting
+        # anything, so it is seconds rather than minutes.
+        run: docker compose config --quiet && echo "all services resolve"
+
+      - name: Referenced files exist
+        # `docker compose config` validates the compose syntax but does not check that each
+        # `dockerfile:` actually exists on disk. Check that explicitly.
+        run: |
+          fail=0
+          for f in $(grep -oE 'dockerfile: [^ ]+' docker-compose.yaml | awk '{print $2}'); do
+            # Paths are relative to each service's build context, which is ./extension throughout.
+            if [ -f "extension/$f" ]; then
+              echo "  ok      extension/$f"
+            else
+              echo "  MISSING extension/$f"
+              fail=1
+            fi
+          done
+          exit $fail
+
+  types-server-image:
+    name: Types server image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: docker/setup-buildx-action@v3
+        id: buildx
+        with:
+          driver: docker-container
+
+      - name: Build
+        # The types server is not attested, so its code hash is not security-critical and this does
+        # not need the two-machine digest comparison the extension image gets. What it does need is
+        # to actually build — the sidecar is excluded from the extension image's dependency set, so
+        # a missing package here would not show up in any other job.
+        run: |
+          docker buildx build \
+            --builder ${{ steps.buildx.outputs.name }} \
+            --progress=plain \
+            --build-arg SOURCE_DATE_EPOCH=$(git log -1 --format=%ct) \
+            --provenance=false \
+            -f extension/Dockerfile.types-server \
+            -t fidensur-types-server:ci \
+            ./extension
+
+      - name: Confirm it serves and refuses to decrypt
+        # The point of this service is what it will NOT do: encrypted payloads are reported as
+        # shape, never unwrapped. A decoder that opened a policy would put confidential data on a
+        # public endpoint, so assert the refusal rather than trusting the implementation.
+        run: |
+          docker run -d --name ts -p 8100:8100 fidensur-types-server:ci
+          for _ in $(seq 1 20); do
+            curl -sf http://localhost:8100/health >/dev/null && break
+            sleep 1
+          done
+
+          echo "--- /health ---"
+          curl -sf http://localhost:8100/health || { docker logs ts; exit 1; }
+
+          echo "--- /registry ---"
+          curl -sf http://localhost:8100/registry || { docker logs ts; exit 1; }
+
+          echo "--- COMPUTE message must report as encrypted, not decoded ---"
+          BODY=$(curl -sf -X POST http://localhost:8100/decode \
+            -H 'Content-Type: application/json' \
+            -d '{"opType":"ALLOC","opCommand":"COMPUTE","kind":"message","data":"0xdeadbeef"}')
+          echo "$BODY"
+
+          echo "$BODY" | grep -q '"encrypted":true' || {
+            echo "::error::COMPUTE message decoder did not report the payload as encrypted"
+            docker logs ts
+            exit 1
+          }
+          echo "ok — encrypted payloads are reported as shape only"
+
+          docker rm -f ts
+
   cross-implementation:
     name: Go matches Solidity
     runs-on: ubuntu-latest

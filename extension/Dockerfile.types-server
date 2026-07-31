@@ -1,0 +1,69 @@
+# Fidensur types server — read-only decoder sidecar.
+#
+# Renders raw instruction and result bytes as readable JSON so the verification explorer can show
+# what an instruction *is* without anyone hand-decoding ABI in a browser.
+#
+# ## This is NOT a TEE workload
+#
+# Worth stating plainly, because the sibling Dockerfile looks similar and the difference is
+# security-relevant. This image:
+#
+#   * runs OUTSIDE the enclave, as an ordinary container
+#   * holds no keys and performs no signing
+#   * has no attestation, so it needs neither MODE nor the launch-policy label
+#   * decodes only what is already public
+#
+# Encrypted payloads are reported as shape — encrypted, length, hex — and never unwrapped. A
+# decoder that opened a policy would put confidential data on a public HTTP endpoint, which is the
+# one thing this service must never do. See pkg/types/register.go.
+#
+# Because nothing here is attested, its code hash is not security-critical and reproducibility is
+# not load-bearing the way it is for the extension image. The same discipline is applied anyway —
+# pinned base by digest, committed lockfile, normalized mtimes — since it costs nothing and keeps
+# the two images consistent.
+#
+# Build:
+#   docker build -f Dockerfile.types-server -t fidensur-types-server .
+
+FROM golang:1.25.1-trixie@sha256:ff83f3762390c2cccb53618ccc18af23e556aff9b1db4428637e9f63287c8171 AS builder
+
+ARG SOURCE_DATE_EPOCH
+ENV SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH
+
+WORKDIR /build
+
+# Manifests first so the dependency layer caches independently of source edits. go.sum pins every
+# dependency by hash; go mod verify checks them before anything compiles.
+COPY --chmod=644 --chown=0:0 go.mod go.sum ./
+RUN go mod download
+RUN go mod verify
+
+# Only what the types server actually imports. cmd/docker and internal/engine are deliberately
+# excluded: the engine is the confidentiality boundary, and there is no reason for its code to
+# exist in an image that serves a public endpoint.
+COPY --chmod=644 --chown=0:0 cmd/types-server/ ./cmd/types-server/
+COPY --chmod=644 --chown=0:0 internal/config/ ./internal/config/
+COPY --chmod=644 --chown=0:0 pkg/ ./pkg/
+
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOFLAGS="-buildvcs=false" \
+    go build -trimpath -ldflags="-buildid= -s -w" -o /app/types-server ./cmd/types-server
+
+RUN if [ "${SOURCE_DATE_EPOCH:-0}" -gt 0 ] 2>/dev/null; then \
+      find /app -exec touch -h -d @${SOURCE_DATE_EPOCH} {} +; \
+    fi
+
+FROM gcr.io/distroless/static
+
+WORKDIR /app
+
+COPY --chmod=755 --chown=65532:65532 --from=builder /app/types-server /app/types-server
+
+ENV TYPES_SERVER_PORT=8100
+
+# Unlike the extension image, this one runs as a non-root user. There is no tee-node to match here,
+# and the service needs no privileges — it reads no files and opens one listening socket.
+USER 65532:65532
+
+EXPOSE 8100
+
+CMD ["/app/types-server"]
