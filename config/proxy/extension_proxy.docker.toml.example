@@ -1,0 +1,55 @@
+# Extension proxy config — Coston2, running under Docker Compose.
+#
+# Copy to extension_proxy.docker.toml and fill in the [db] block. That file is gitignored because
+# it holds credentials; this .example is the committed template.
+#
+#   cp config/proxy/extension_proxy.docker.toml.example config/proxy/extension_proxy.docker.toml
+#
+# Hostnames here are Docker Compose service names, not localhost, because the proxy resolves them
+# from inside the compose network.
+
+redis_port = "redis:6379"
+private_key_variable = "PROXY_PRIVATE_KEY"
+initial_signing_policy_offset = 2
+signing_policy_fetch_interval = "20s"
+
+# Must match CHAIN_ID in .env and the chain itself. The TEE node binds signatures to this value, so
+# a mismatch produces signatures that fail on-chain verification with no other symptom.
+chain_id = 114
+
+# Coston2 indexer database.
+#
+# These credentials are issued by Flare and are not in the public docs — the ones that used to be
+# published are dead. Ask in the developer/hackathon channels.
+#
+# Without a working connection the proxy cannot see instructions at all: it starts, reports healthy,
+# and its queue silently stays empty. Check `docker compose logs ext-proxy` for DB sync errors
+# before assuming the problem is elsewhere in the stack.
+[db]
+host = "<indexer-db-host>"
+port = 3306
+database = "<indexer-db-name>"
+username = "<indexer-db-user>"
+password = "<indexer-db-password>"
+log_queries = false
+
+# Core Coston2 protocol contracts. These are separate from the FlareTeeManager diamond and were not
+# affected by its redeployment — verified against config/coston2/deployed-addresses.json.
+[addresses]
+flare_systems_manager = "0xA90Db6D10F856799b10ef2A77EBCbF460aC71e52"
+relay = "0xa10B672D1c62e5457b17af63d4302add6A99d7dE"
+voter_registry = "0x6a0AF07b7972177B176d3D422555cbc98DfDe914"
+
+# 6663 is internal (extension container ↔ proxy). 6664 is external and is what the tunnel must
+# point at — data providers reach the proxy through it.
+[ports]
+internal = "6663"
+external = "6664"
+
+[info_timing]
+cycle_internal = "10s"
+cycle_queue_response_wait = "2s"
+
+[voting]
+proposal_expiration = "12s"
+max_pending_request = 10000
