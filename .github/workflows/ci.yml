@@ -101,6 +101,15 @@ jobs:
         #
         # `config` resolves every service definition and build context without building or starting
         # anything, so it is seconds rather than minutes.
+        #
+        # The dummy values matter. docker-compose declares these with `${VAR:?message}`, which makes
+        # compose refuse to run when they are unset — a deliberate guard against starting the stack
+        # with a missing signing key. But that guard also fails *static* validation, since CI has no
+        # .env. Supplying throwaway values here validates the file without weakening the runtime
+        # check, which is the behaviour worth keeping.
+        env:
+          PROXY_PRIVATE_KEY: "0000000000000000000000000000000000000000000000000000000000000001"
+          INITIAL_OWNER: "0x0000000000000000000000000000000000000001"
         run: docker compose config --quiet && echo "all services resolve"
 
       - name: Referenced files exist
@@ -138,14 +147,21 @@ jobs:
         # to actually build — the sidecar is excluded from the extension image's dependency set, so
         # a missing package here would not show up in any other job.
         run: |
+          # --load is required. With the docker-container driver the built image stays in the
+          # builder's own cache and never enters the local Docker daemon, so the `docker run` below
+          # finds nothing locally and tries to pull `fidensur-types-server:ci` from Docker Hub —
+          # failing with "pull access denied" rather than anything that names the real problem.
           docker buildx build \
             --builder ${{ steps.buildx.outputs.name }} \
             --progress=plain \
             --build-arg SOURCE_DATE_EPOCH=$(git log -1 --format=%ct) \
             --provenance=false \
+            --load \
             -f extension/Dockerfile.types-server \
             -t fidensur-types-server:ci \
             ./extension
+
+          docker image inspect fidensur-types-server:ci --format 'loaded: {{.Id}}'
 
       - name: Confirm it serves and refuses to decrypt
         # The point of this service is what it will NOT do: encrypted payloads are reported as
