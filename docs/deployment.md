@@ -136,12 +136,39 @@ Expected:
 
 ## Phase 4 — Start the stack
 
+### Pull the image; do not build it
+
+Building the extension image compiles go-ethereum and needs roughly **4 GB**. On a modest host it
+will be OOM-killed.
+
+CI publishes the image after proving it reproducible on two independent runners, so pull that
+instead:
+
+```bash
+export FIDENSUR_IMAGE_TAG=<commit-sha>     # from the CI run summary
+docker compose pull
+docker compose up -d
+```
+
+Pin a **commit SHA**, not `latest`. The SHA names one exact commit, so the running image and the
+source someone rebuilds to verify it are unambiguously the same thing — which is the entire point of
+the reproducibility work. `latest` moves and cannot make that claim.
+
+This is also correctness, not just convenience: the CI image is the artifact whose hash was actually
+verified. A local rebuild is a different artifact until proven otherwise.
+
+> The images are private until you make them public, once, at
+> `https://github.com/<you>/fidensur/pkgs/container/fidensur-extension`.
+
+### Or build locally, if the host has the memory
+
 ```bash
 ./scripts/start-services.sh
 ```
 
-This derives `SOURCE_DATE_EPOCH` from the last commit, builds the reproducible image, and starts
-`redis`, `ext-proxy`, and `extension-tee`. The first build compiles go-ethereum and takes a while.
+This derives `SOURCE_DATE_EPOCH` from the last commit, builds the image, and starts `redis`,
+`ext-proxy`, and `extension-tee`. Reach for this when developing the extension itself, not for a
+deployment.
 
 The script waits for the proxy and prints its attestation report. Confirm the proxy is reachable
 from outside the VM too:

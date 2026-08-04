@@ -342,6 +342,95 @@ jobs:
           name: hash-${{ matrix.attempt }}
           path: /tmp/out/
 
+  publish-images:
+    name: Publish images to ghcr.io
+    runs-on: ubuntu-latest
+    # Only after the build is proven reproducible. Publishing an image whose hash cannot be
+    # independently reproduced would undermine the point of publishing it: the whole argument is
+    # that a third party can rebuild the source and confirm they get the same artifact.
+    needs: [compare-digests, types-server-image]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: docker/setup-buildx-action@v3
+        id: buildx
+        with:
+          driver: docker-container
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          # Provided automatically by Actions; no secret to configure.
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Derive SOURCE_DATE_EPOCH from the commit
+        id: epoch
+        run: echo "value=$(git log -1 --format=%ct)" >> "$GITHUB_OUTPUT"
+
+      - name: Publish the extension image
+        # Tagged with the commit SHA as well as :latest. The SHA tag is what a deployment should
+        # pin: it names one exact commit, so the running image and the source a verifier rebuilds
+        # are unambiguously the same thing. :latest is a moving target and cannot make that claim.
+        env:
+          SOURCE_DATE_EPOCH: ${{ steps.epoch.outputs.value }}
+        run: |
+          REPO=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          docker buildx build \
+            --builder ${{ steps.buildx.outputs.name }} \
+            --progress=plain \
+            --build-arg SOURCE_DATE_EPOCH=${{ steps.epoch.outputs.value }} \
+            --provenance=false \
+            --sbom=false \
+            --push \
+            -t ghcr.io/${REPO}-extension:latest \
+            -t ghcr.io/${REPO}-extension:${{ github.sha }} \
+            ./extension
+
+      - name: Publish the types-server image
+        env:
+          SOURCE_DATE_EPOCH: ${{ steps.epoch.outputs.value }}
+        run: |
+          REPO=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          docker buildx build \
+            --builder ${{ steps.buildx.outputs.name }} \
+            --progress=plain \
+            --build-arg SOURCE_DATE_EPOCH=${{ steps.epoch.outputs.value }} \
+            --provenance=false \
+            --sbom=false \
+            --push \
+            -f extension/Dockerfile.types-server \
+            -t ghcr.io/${REPO}-types-server:latest \
+            -t ghcr.io/${REPO}-types-server:${{ github.sha }} \
+            ./extension
+
+      - name: Summary
+        run: |
+          REPO=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          {
+            echo "### Images published"
+            echo ""
+            echo '```'
+            echo "ghcr.io/${REPO}-extension:${{ github.sha }}"
+            echo "ghcr.io/${REPO}-types-server:${{ github.sha }}"
+            echo '```'
+            echo ""
+            echo "Pull instead of building — compiling go-ethereum locally needs ~4 GB:"
+            echo '```bash'
+            echo "export FIDENSUR_IMAGE_TAG=${{ github.sha }}"
+            echo "docker compose pull && docker compose up -d"
+            echo '```'
+            echo ""
+            echo "Packages are private by default. Make them public once at:"
+            echo "https://github.com/${{ github.repository }}/pkgs/container/$(basename ${REPO})-extension"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   compare-digests:
     name: Digests match across machines
     runs-on: ubuntu-latest

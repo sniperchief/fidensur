@@ -37,6 +37,19 @@ services:
       - redis
 
   extension-tee:
+    # Prefer the image CI published. Building this locally compiles go-ethereum and needs roughly
+    # 4 GB, which is more than a modest machine has — but the deeper reason is correctness: the CI
+    # image is the one whose hash was reproduced on two independent runners, so running it means
+    # running the artifact that was actually verified rather than a local rebuild that might differ.
+    #
+    # FIDENSUR_IMAGE_TAG should be a commit SHA in any real deployment. It names one exact commit,
+    # so the running image and the source a verifier rebuilds are unambiguously the same thing;
+    # `latest` is a moving target and cannot make that claim.
+    #
+    # `docker compose build` still works and falls back to building here, for developing the
+    # extension itself on a machine with the memory for it.
+    image: ${FIDENSUR_IMAGE:-ghcr.io/sniperchief/fidensur-extension}:${FIDENSUR_IMAGE_TAG:-latest}
+    pull_policy: ${FIDENSUR_PULL_POLICY:-missing}
     build:
       context: ./extension
       dockerfile: Dockerfile
@@ -86,6 +99,8 @@ services:
   # explorer. Runs outside the enclave and holds no keys — it decodes only what is already public,
   # and reports encrypted payloads as shape rather than content.
   types-server:
+    image: ${FIDENSUR_TYPES_IMAGE:-ghcr.io/sniperchief/fidensur-types-server}:${FIDENSUR_IMAGE_TAG:-latest}
+    pull_policy: ${FIDENSUR_PULL_POLICY:-missing}
     build:
       context: ./extension
       dockerfile: Dockerfile.types-server
