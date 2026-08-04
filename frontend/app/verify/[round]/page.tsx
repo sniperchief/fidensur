@@ -13,7 +13,7 @@
 
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 import { createPublicClient, http, type Address, type Hex } from "viem";
 
 import {
@@ -50,11 +50,28 @@ interface PageState {
   result?: ActionResult | null;
   steps?: VerificationSteps;
   error?: string;
+  /** The round has never been created. Distinct from an error — it is the expected answer here. */
+  notFound?: boolean;
   loading: boolean;
 }
 
-export default function VerifyRoundPage({ params }: { params: { round: string } }) {
-  const roundId = useMemo(() => BigInt(params.round), [params.round]);
+// `params` is a Promise, even in a client component — Next 15 changed this. Unwrapping it with
+// `use()` is required; typing it as a plain object type-checks and then fails at runtime.
+export default function VerifyRoundPage({ params }: { params: Promise<{ round: string }> }) {
+  // Named roundParam, not round: the round *object* is destructured from state further down, in
+  // this same scope, and two `const round` declarations would be a duplicate-binding SyntaxError.
+  const { round: roundParam } = use(params);
+
+  // A non-numeric segment arrives here as a string and BigInt() throws on it. Guard so a mistyped
+  // URL renders a message instead of an unhandled exception.
+  const roundId = useMemo(() => {
+    try {
+      return BigInt(roundParam);
+    } catch {
+      return null;
+    }
+  }, [roundParam]);
+
   const [state, setState] = useState<PageState>({ loading: true });
 
   useEffect(() => {
@@ -63,8 +80,9 @@ export default function VerifyRoundPage({ params }: { params: { round: string } 
     (async () => {
       try {
         if (!CONTRACT) throw new Error("NEXT_PUBLIC_FIDENSUR_CONTRACT is not set");
+        if (roundId === null) throw new Error(`"${roundParam}" is not a valid round number`);
 
-        const [round, teeAddress, extensionId] = await Promise.all([
+        const [roundData, teeAddress, extensionId] = await Promise.all([
           client.readContract({
             address: CONTRACT,
             abi: FIDENSUR_READ_ABI,
@@ -100,9 +118,9 @@ export default function VerifyRoundPage({ params }: { params: { round: string } 
         // the proxy still holds it; an older round may legitimately have none available.
         let result: ActionResult | null = null;
         let steps: VerificationSteps | undefined;
-        if (PROXY_URL && round.computeInstructionId) {
+        if (PROXY_URL && roundData.computeInstructionId) {
           try {
-            result = await new ProxyClient(PROXY_URL).result(round.computeInstructionId);
+            result = await new ProxyClient(PROXY_URL).result(roundData.computeInstructionId);
             if (result && result.status === 1) {
               steps = await verifyActionResult(result, teeAddress, COSTON2.id);
             }
@@ -112,11 +130,18 @@ export default function VerifyRoundPage({ params }: { params: { round: string } 
         }
 
         if (!cancelled) {
-          setState({ round, teeAddress, extensionId, attestation, verdict, result, steps, loading: false });
+          setState({ round: roundData, teeAddress, extensionId, attestation, verdict, result, steps, loading: false });
         }
       } catch (e) {
         if (!cancelled) {
-          setState({ loading: false, error: e instanceof Error ? e.message : String(e) });
+          const raw = e instanceof Error ? e.message : String(e);
+
+          // A round that has never been created is the single most likely reason someone lands
+          // here — a guessed URL, or a stale link. The contract reverts with NoSuchRound, which is
+          // correct behaviour and not an error worth showing as a stack trace.
+          const notFound = raw.includes("NoSuchRound") || raw.includes("0x6a4fd69d");
+
+          setState({ loading: false, notFound, error: notFound ? undefined : raw });
         }
       }
     })();
@@ -126,7 +151,28 @@ export default function VerifyRoundPage({ params }: { params: { round: string } 
     };
   }, [roundId]);
 
-  if (state.loading) return <Shell><p>Loading round {params.round}…</p></Shell>;
+  if (state.loading) return <Shell><p>Loading round {roundParam}…</p></Shell>;
+
+  if (state.notFound) {
+    return (
+      <Shell>
+        <h1>Round {roundParam}</h1>
+        <Callout kind="unknown">
+          <p style={{ margin: "0 0 0.5rem" }}>
+            <strong>This round does not exist.</strong>
+          </p>
+          <p style={{ margin: 0 }}>
+            The contract is live and responded — it simply has no round numbered {roundParam} yet.
+            Rounds are numbered from 0 in the order they are created.
+          </p>
+        </Callout>
+        <p>
+          <a href="/">← Back</a>
+        </p>
+      </Shell>
+    );
+  }
+
   if (state.error) return <Shell><Callout kind="fail">{state.error}</Callout></Shell>;
 
   const { round, teeAddress, attestation, verdict, result, steps } = state;
@@ -138,7 +184,7 @@ export default function VerifyRoundPage({ params }: { params: { round: string } 
   return (
     <Shell>
       <header>
-        <h1>Round {params.round}</h1>
+        <h1>Round {roundParam}</h1>
         <p className="tagline">Allocate funds privately. Prove the computation publicly.</p>
         <dl className="summary">
           <div><dt>Status</dt><dd>{statusName(round.status)}</dd></div>

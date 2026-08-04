@@ -62,12 +62,114 @@ export interface Round {
 }
 
 /**
+ * Every custom error the contract can revert with.
+ *
+ * These must be in the ABI passed to any call, or viem cannot decode a revert and surfaces the raw
+ * four-byte selector instead — "reverted with signature 0x6a4fd69d", which tells a user nothing.
+ * The contract uses custom errors throughout (they are far cheaper than revert strings), so without
+ * these every failure is unreadable.
+ *
+ * Kept as a separate constant and spread into each ABI below, so adding an error means adding it
+ * once rather than in three places.
+ */
+export const FIDENSUR_ERRORS_ABI = [
+  { type: "error", name: "ZeroAddress", inputs: [] },
+  { type: "error", name: "NoCode", inputs: [{ name: "target", type: "address" }] },
+  { type: "error", name: "ExtensionIdAlreadySet", inputs: [] },
+  { type: "error", name: "ExtensionIdNotFound", inputs: [] },
+  { type: "error", name: "ExtensionIdNotSet", inputs: [] },
+  { type: "error", name: "TeeAddressNotSet", inputs: [] },
+  { type: "error", name: "NoSuchRound", inputs: [{ name: "roundId", type: "uint256" }] },
+  {
+    type: "error",
+    name: "WrongStatus",
+    inputs: [
+      { name: "roundId", type: "uint256" },
+      { name: "actual", type: "uint8" },
+      { name: "expected", type: "uint8" },
+    ],
+  },
+  {
+    type: "error",
+    name: "NotOrganization",
+    inputs: [
+      { name: "caller", type: "address" },
+      { name: "organization", type: "address" },
+    ],
+  },
+  { type: "error", name: "InvalidClaimWindow", inputs: [{ name: "provided", type: "uint48" }] },
+  { type: "error", name: "ZeroAmount", inputs: [] },
+  { type: "error", name: "NothingFunded", inputs: [{ name: "roundId", type: "uint256" }] },
+  { type: "error", name: "EmptyCommitment", inputs: [] },
+  {
+    type: "error",
+    name: "CiphertextMismatch",
+    inputs: [
+      { name: "provided", type: "bytes32" },
+      { name: "committed", type: "bytes32" },
+    ],
+  },
+  { type: "error", name: "EmptyCiphertext", inputs: [] },
+  {
+    type: "error",
+    name: "RetryTooSoon",
+    inputs: [
+      { name: "requestedAt", type: "uint48" },
+      { name: "earliestRetry", type: "uint48" },
+    ],
+  },
+  { type: "error", name: "NoTeeAvailable", inputs: [] },
+  { type: "error", name: "ResultNotForThisContract", inputs: [{ name: "encoded", type: "address" }] },
+  {
+    type: "error",
+    name: "ResultNotForThisRound",
+    inputs: [
+      { name: "actionId", type: "bytes32" },
+      { name: "expected", type: "bytes32" },
+    ],
+  },
+  {
+    type: "error",
+    name: "PolicyCommitmentMismatch",
+    inputs: [
+      { name: "encoded", type: "bytes32" },
+      { name: "stored", type: "bytes32" },
+    ],
+  },
+  { type: "error", name: "EmptyMerkleRoot", inputs: [] },
+  { type: "error", name: "NoRecipients", inputs: [] },
+  {
+    type: "error",
+    name: "OverAllocated",
+    inputs: [
+      { name: "totalAllocated", type: "uint256" },
+      { name: "funded", type: "uint256" },
+    ],
+  },
+  {
+    type: "error",
+    name: "AlreadyClaimed",
+    inputs: [
+      { name: "roundId", type: "uint256" },
+      { name: "index", type: "uint256" },
+    ],
+  },
+  { type: "error", name: "ClaimWindowClosed", inputs: [{ name: "deadline", type: "uint48" }] },
+  { type: "error", name: "ClaimWindowStillOpen", inputs: [{ name: "deadline", type: "uint48" }] },
+  { type: "error", name: "BadMerkleProof", inputs: [] },
+  { type: "error", name: "AlreadySwept", inputs: [{ name: "roundId", type: "uint256" }] },
+  { type: "error", name: "InvalidDisclosureKey", inputs: [{ name: "length", type: "uint256" }] },
+  { type: "error", name: "NothingToRescue", inputs: [] },
+] as const;
+
+/**
  * The read surface the verification explorer uses.
  *
  * Everything here is a `view`. The explorer never sends a transaction — a page whose job is to let
  * a reader check someone else's claims should not also be able to change state.
  */
 export const FIDENSUR_READ_ABI = [
+  ...FIDENSUR_ERRORS_ABI,
   {
     type: "function",
     name: "getRound",
@@ -163,6 +265,7 @@ export const FIDENSUR_READ_ABI = [
 
 /** Write functions, used by the organization console and the recipient portal only. */
 export const FIDENSUR_WRITE_ABI = [
+  ...FIDENSUR_ERRORS_ABI,
   {
     type: "function",
     name: "createRound",

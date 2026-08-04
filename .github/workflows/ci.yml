@@ -419,3 +419,11 @@ jobs:
         # the Solidity implementation. The two are deliberately independent; this is where they
         # get compared.
         run: npx vitest run
+
+      - name: Build
+        working-directory: frontend
+        # tsc is not enough. It happily accepted a page with two `const round` declarations in one
+        # scope and a `params` prop typed as a plain object when Next 15 passes a Promise — the
+        # first is a SyntaxError at compile time, the second breaks at runtime. Neither surfaced
+        # until the app was actually built, because until then nothing compiled the app at all.
+        run: npx next build

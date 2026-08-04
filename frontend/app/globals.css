@@ -1,0 +1,380 @@
+/* Fidensur — shared styles.
+ *
+ * Written for legibility over decoration. The verification report is meant to be read carefully by
+ * someone who does not trust it, so hashes are monospaced and never truncated where the exact value
+ * matters, pass/fail is stated in words rather than colour alone, and raw values sit beside every
+ * verdict rather than behind a disclosure triangle.
+ *
+ * Colour is never the only signal. "PASS"/"FAIL" are words, so the page still works in greyscale,
+ * for colour-blind readers, and in a printout.
+ */
+
+:root {
+  --bg: #ffffff;
+  --fg: #1a1a1a;
+  --muted: #5c6370;
+  --border: #e1e4e8;
+  --surface: #f6f8fa;
+  --accent: #0b5fff;
+  --pass: #0f7b3f;
+  --pass-bg: #eaf7ef;
+  --fail: #b3261e;
+  --fail-bg: #fdecea;
+  --warn: #8a5a00;
+  --warn-bg: #fff8e5;
+  --unknown: #4a4a4a;
+  --unknown-bg: #f0f0f0;
+
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117;
+    --fg: #e6edf3;
+    --muted: #8b949e;
+    --border: #30363d;
+    --surface: #161b22;
+    --accent: #58a6ff;
+    --pass: #3fb950;
+    --pass-bg: #10281a;
+    --fail: #f85149;
+    --fail-bg: #2d1213;
+    --warn: #d29922;
+    --warn-bg: #2b2412;
+    --unknown: #9da7b3;
+    --unknown-bg: #1c2128;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--sans);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--accent);
+}
+
+code {
+  font-family: var(--mono);
+  font-size: 0.86em;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
+  /* Hashes are long and must stay readable rather than overflow the viewport on a phone. */
+  word-break: break-all;
+}
+
+pre {
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+}
+
+pre code {
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+/* ---------- landing ---------- */
+
+.landing {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 4rem 1.25rem 6rem;
+}
+
+.landing h1 {
+  font-size: 2.5rem;
+  margin: 0 0 0.25rem;
+  letter-spacing: -0.02em;
+}
+
+.landing .tagline {
+  font-size: 1.15rem;
+  color: var(--muted);
+  margin: 0 0 2.5rem;
+}
+
+.landing h2 {
+  font-size: 1.15rem;
+  margin: 2.5rem 0 0.75rem;
+}
+
+.lookup {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin: 1rem 0;
+}
+
+.lookup input {
+  flex: 1 1 12rem;
+  font-family: var(--mono);
+  font-size: 1rem;
+  padding: 0.6rem 0.75rem;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.lookup button {
+  font: inherit;
+  font-weight: 600;
+  padding: 0.6rem 1.25rem;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.lookup button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.facts {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.25rem 1rem;
+  background: var(--surface);
+}
+
+.facts div {
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.facts div:last-child {
+  border-bottom: none;
+}
+
+.facts dt {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.facts dd {
+  margin: 0;
+  text-align: right;
+}
+
+/* ---------- verification report ---------- */
+
+.verify {
+  max-width: 52rem;
+  margin: 0 auto;
+  padding: 3rem 1.25rem 6rem;
+}
+
+.verify h1 {
+  font-size: 2rem;
+  margin: 0 0 0.25rem;
+}
+
+.verify .tagline {
+  color: var(--muted);
+  margin: 0 0 2rem;
+}
+
+.verify .summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 1rem;
+  margin: 0 0 2.5rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.verify .summary dt {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.verify .summary dd {
+  margin: 0.2rem 0 0;
+  font-weight: 600;
+}
+
+.verify section {
+  margin: 0 0 2.75rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.verify h2 {
+  font-size: 1.2rem;
+  margin: 0 0 0.4rem;
+  display: flex;
+  gap: 0.6rem;
+  align-items: baseline;
+}
+
+.verify h2 .num {
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  width: 1.6rem;
+  height: 1.6rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+
+/* Why the question matters. Deliberately prominent: a verification page that only shows verdicts
+ * is asking to be trusted, which is the opposite of the point. */
+.verify .why {
+  color: var(--muted);
+  font-size: 0.95rem;
+  margin: 0 0 1.25rem;
+}
+
+.verify .note {
+  color: var(--muted);
+  font-size: 0.9rem;
+  border-left: 2px solid var(--border);
+  padding-left: 0.9rem;
+  margin: 1rem 0 0;
+}
+
+/* A single check. The raw value always sits beside the verdict — never hidden. */
+.check {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.5rem 0.75rem;
+  align-items: baseline;
+  padding: 0.7rem 0.9rem;
+  margin: 0 0 0.6rem;
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-radius: 6px;
+}
+
+.check.pass {
+  border-left-color: var(--pass);
+  background: var(--pass-bg);
+}
+
+.check.fail {
+  border-left-color: var(--fail);
+  background: var(--fail-bg);
+}
+
+/* Text, not just colour — readable in greyscale, in print, and to colour-blind readers. */
+.check .mark {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 0.15rem 0.4rem;
+  border-radius: 3px;
+}
+
+.check.pass .mark {
+  color: var(--pass);
+  border: 1px solid var(--pass);
+}
+
+.check.fail .mark {
+  color: var(--fail);
+  border: 1px solid var(--fail);
+}
+
+.check .label {
+  font-weight: 500;
+}
+
+.check .value {
+  grid-column: 2;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+
+.field {
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.field:last-of-type {
+  border-bottom: none;
+}
+
+.field .label {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.field .value {
+  font-size: 0.92rem;
+}
+
+.callout {
+  padding: 0.85rem 1rem;
+  margin: 1rem 0;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  font-size: 0.93rem;
+}
+
+.callout.pass {
+  border-left-color: var(--pass);
+  background: var(--pass-bg);
+}
+
+.callout.fail {
+  border-left-color: var(--fail);
+  background: var(--fail-bg);
+}
+
+.callout.warn {
+  border-left-color: var(--warn);
+  background: var(--warn-bg);
+}
+
+.callout.unknown {
+  border-left-color: var(--unknown);
+  background: var(--unknown-bg);
+}
+
+.verify footer {
+  margin-top: 3rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.88rem;
+}

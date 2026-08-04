@@ -36,3 +36,6 @@ Thumbs.db
 
 # Built binary — reproducible from source, no reason to track
 extension/register-extension.exe
+
+# TypeScript incremental build cache — regenerated on every build
+*.tsbuildinfo
