@@ -51,6 +51,14 @@ export interface ActionResult {
   status: number;
   /** 65-byte `[r ‖ s ‖ v]` signature from the TEE machine. */
   signature: Hex;
+  /**
+   * `ActionResult.Log` — the enclave's own explanation, populated on failure.
+   *
+   * Not part of the signed hash, so it is untrusted narration rather than evidence. It is the only
+   * account of *why* a status-0 result failed, though, and without it a rejected instruction is
+   * indistinguishable from one that never arrived.
+   */
+  log?: string;
 }
 
 /** Every intermediate value, so the UI can show its work rather than assert a conclusion. */

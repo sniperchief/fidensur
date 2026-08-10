@@ -4,20 +4,32 @@
  * Everything the proxy exposes is public: attestation metadata, and signed results that are already
  * destined for the chain. Nothing here handles a key or a plaintext policy.
  *
- * ## A caveat on result polling
+ * ## Result polling
  *
  * The FCC documentation says "the caller polls the proxy for the result" without specifying the
- * endpoint, the response shape, or the expected latency (`docs/fcc-research.md` §11, item 7). The
- * implementation below tries the endpoints the reference applications appear to use and normalizes
- * whatever comes back.
+ * endpoint or the response shape (`docs/fcc-research.md` §11, item 7). This module previously
+ * guessed at three plausible spellings; all three were wrong. The authority is
+ * `fccutils.ActionResult` in the Flare scaffold, whose comment marks it "do not modify":
  *
- * That guesswork is deliberately confined to this one module. When the real shape is known, this
- * file changes and nothing else does — which is the whole reason the UI never talks to the proxy
- * directly.
+ *     http.Get(nodeURL + "/action/result/" + actionID.Hex())
+ *
+ * and it decodes `tee-node`'s `types.ActionResponse`:
+ *
+ *     { "result": { id, submissionTag, status, log, data, … },
+ *       "signature": "0x…", "proxySignature": "0x…" }
+ *
+ * **The signature is a sibling of `result`, not a field inside it.** That is easy to misread and
+ * fails in a way that looks like a pending result rather than a parse error.
  */
 
 import type { Address, Hex } from "viem";
 import type { ActionResult, AttestationReport } from "./verify";
+
+/** A secp256k1 point as tee-node reports it: two 32-byte hex coordinates, not an encoded key. */
+export interface TeePublicKey {
+  x: Hex;
+  y: Hex;
+}
 
 export interface ProxyInfo {
   machineData?: {
@@ -25,8 +37,27 @@ export interface ProxyInfo {
     codeHash?: Hex;
     extensionId?: string | number;
     initialOwner?: Address;
+    publicKey?: TeePublicKey;
   };
   [key: string]: unknown;
+}
+
+/**
+ * Assembles tee-node's `{x, y}` into an uncompressed SEC1 key: `0x04 ‖ X(32) ‖ Y(32)`.
+ *
+ * `eciesEncrypt` needs the encoded form. Each coordinate is left-padded to a full 32 bytes rather
+ * than used as reported — a coordinate with leading zero bytes serializes short, and concatenating
+ * the short form silently shifts Y into X's last byte, producing a key that is merely *wrong*
+ * rather than invalid. The policy would then encrypt successfully to a point nobody holds.
+ */
+export function encodeTeePublicKey(key: TeePublicKey): Hex {
+  const coord = (v: Hex) => v.slice(2).padStart(64, "0");
+  const x = coord(key.x);
+  const y = coord(key.y);
+  if (x.length !== 64 || y.length !== 64) {
+    throw new Error(`TEE public key coordinates are not 32 bytes: x=${key.x} y=${key.y}`);
+  }
+  return `0x04${x}${y}` as Hex;
 }
 
 export class ProxyClient {
@@ -64,6 +95,21 @@ export class ProxyClient {
   }
 
   /**
+   * Reads the enclave's public key, for encrypting a policy to it.
+   *
+   * This is the key half of the confidential path: get it wrong and the ciphertext is unreadable
+   * by the one party meant to read it, discovered only after an on-chain fee has been paid.
+   */
+  async extensionPublicKey(): Promise<Hex> {
+    const info = await this.info();
+    const key = info.machineData?.publicKey;
+    if (!key?.x || !key?.y) {
+      throw new Error("proxy /info reported no machine public key — is the TEE node running?");
+    }
+    return encodeTeePublicKey(key);
+  }
+
+  /**
    * Fetches the signed result for one instruction.
    *
    * Returns null while the result is still pending, so a caller can distinguish "not ready yet"
@@ -71,30 +117,15 @@ export class ProxyClient {
    * legitimately reports status 2 for a while.
    */
   async result(instructionId: Hex): Promise<ActionResult | null> {
-    // Endpoint naming is not documented; try the plausible candidates in order and take the first
-    // that answers. A 404 here means "this proxy spells it differently", not "no such result".
-    const candidates = [
-      `${this.baseUrl}/result/${instructionId}`,
-      `${this.baseUrl}/results/${instructionId}`,
-      `${this.baseUrl}/instruction/${instructionId}/result`,
-    ];
-
-    for (const url of candidates) {
-      let res: Response;
-      try {
-        res = await fetch(url, { cache: "no-store" });
-      } catch {
-        continue; // network-level failure on this candidate; try the next
-      }
-      if (res.status === 404) continue;
-      if (!res.ok) continue;
-
-      const body = (await res.json()) as Record<string, unknown>;
-      const normalized = normalizeActionResult(body);
-      if (normalized) return normalized;
+    let res: Response;
+    try {
+      res = await fetch(`${this.baseUrl}/action/result/${instructionId}`, { cache: "no-store" });
+    } catch {
+      return null; // proxy unreachable this tick; the caller's poll loop will retry
     }
+    if (!res.ok) return null;
 
-    return null;
+    return normalizeActionResult((await res.json()) as Record<string, unknown>);
   }
 
   /**
@@ -123,30 +154,25 @@ export class ProxyClient {
 }
 
 /**
- * Normalizes a proxy response into an ActionResult.
+ * Normalizes a `types.ActionResponse` into an ActionResult.
  *
- * Field naming varies across the FCC surface (`id` vs `actionId`, `submissionTag` vs `tag`), so
- * accept the variants rather than failing on a cosmetic difference. Returns null when the required
- * fields are simply absent — that is a pending result, not a malformed one.
+ * The signature is read from the response root, not from `result` — see the module comment. A
+ * status-0 result is returned rather than discarded: it is terminal and its `log` is the only
+ * account of what the enclave objected to.
  */
 function normalizeActionResult(body: Record<string, unknown>): ActionResult | null {
-  const inner = (body.result ?? body.actionResult ?? body) as Record<string, unknown>;
+  const inner = (body.result ?? {}) as Record<string, unknown>;
 
-  const data = (inner.data ?? inner.Data) as Hex | undefined;
-  const actionId = (inner.id ?? inner.ID ?? inner.actionId) as Hex | undefined;
-  const signature = (inner.signature ?? inner.Signature ?? inner.sig) as Hex | undefined;
-  const submissionTag = (inner.submissionTag ?? inner.SubmissionTag ?? "submit") as string;
-  const status = Number(inner.status ?? inner.Status ?? 2);
-
+  const actionId = inner.id as Hex | undefined;
   if (!actionId) return null;
-  if (status === 2) {
-    // Genuinely pending: report it so waitForResult keeps going rather than treating an
-    // unsigned in-progress record as a final answer.
-    return { data: (data ?? "0x") as Hex, actionId, submissionTag, status, signature: "0x" as Hex };
-  }
-  if (!data || !signature) return null;
 
-  return { data, actionId, submissionTag, status, signature };
+  const data = (inner.data ?? "0x") as Hex;
+  const submissionTag = (inner.submissionTag ?? "submit") as string;
+  const status = Number(inner.status ?? 2);
+  const log = inner.log as string | undefined;
+  const signature = (body.signature ?? "0x") as Hex;
+
+  return { data, actionId, submissionTag, status, signature, log };
 }
 
 /** Client for the read-only types server, which renders instruction bytes as readable JSON. */
