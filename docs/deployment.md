@@ -108,11 +108,22 @@ FIDENSUR_CONTRACT=0xF471169436d475917A63780EF13d9a4320c914b9
 EOF
 ```
 
-> **`EXTENSION_ID` must equal what `extensionId()` returns on-chain**, which is not necessarily what
-> a registration call reported. Registration is not idempotent: running it twice binds one contract
-> to two IDs, and `setExtensionId()` caches the **lowest** one permanently. Using the other value
-> points the TEE node at an extension the contract never addresses, and the symptom appears much
-> later as `MachineManager.TooMany()`. Verify with `./scripts/check-tee-status.sh`.
+> **`EXTENSION_ID` must be 32-byte hex, not a decimal number.** tee-node strips an optional `0x`,
+> hex-decodes the rest, and requires exactly 32 bytes. Writing the decimal form produces
+> `invalid hex in environment variable EXTENSION_ID: encoding/hex: odd length hex string` — because
+> `65818` is five characters.
+>
+> Worse, that failure is quiet: the node fails to initialise while the extension's own HTTP server
+> starts anyway, so the container stays `Up` and `docker compose ps` looks healthy while nothing is
+> served. Check `docker compose logs extension-tee` for `node initialization failed`.
+>
+> Convert with `printf '0x%064x\n' <decimal>`.
+
+> **The value must equal what `extensionId()` returns on-chain**, which is not necessarily what a
+> registration call reported. Registration is not idempotent: running it twice binds one contract to
+> two IDs, and `setExtensionId()` caches the **lowest** one permanently. Using the other points the
+> TEE node at an extension the contract never addresses, and the symptom appears much later as
+> `MachineManager.TooMany()`. Verify with `./scripts/check-tee-status.sh`.
 
 ### 3.4 Check before starting
 

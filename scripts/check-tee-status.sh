@@ -64,12 +64,19 @@ if [[ -n "${FIDENSUR_CONTRACT:-}" ]]; then
   echo "  config says:         ${EXTENSION_ID:-<unset>}"
 
   if [[ -n "${EXTENSION_ID:-}" && -n "${ON_CHAIN_ID:-}" ]]; then
-    if [[ "$ON_CHAIN_ID" == "$EXTENSION_ID" ]]; then
-      echo "  ok    they match"
+    # Compare numerically, not as strings. The contract reports decimal; config/extension.env holds
+    # 32-byte hex, because that is what tee-node parses. Same value, different notation — comparing
+    # the text reported a mismatch that did not exist.
+    CONFIG_DEC=$(printf '%d' "$EXTENSION_ID" 2>/dev/null || echo "")
+
+    if [[ -z "$CONFIG_DEC" ]]; then
+      echo "  FAIL  EXTENSION_ID is not a number this script can read: $EXTENSION_ID"
+    elif [[ "$ON_CHAIN_ID" == "$CONFIG_DEC" ]]; then
+      echo "  ok    they match ($ON_CHAIN_ID)"
     else
       echo "  FAIL  MISMATCH — the contract only ever sends instructions under $ON_CHAIN_ID."
-      echo "        Set EXTENSION_ID=$ON_CHAIN_ID in config/extension.env."
-      echo "        The on-chain value is set-once and authoritative."
+      echo "        config/extension.env resolves to $CONFIG_DEC."
+      echo "        The on-chain value is set-once and authoritative; set the config to match."
     fi
   fi
 
