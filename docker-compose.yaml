@@ -123,10 +123,16 @@ services:
       - EXTENSION_PORT=7702
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
 
-      # The Fidensur deployment this engine serves. Set by pre-build.sh via config/extension.env.
-      # The engine refuses to start without it: an engine that cannot tell which deployment it
-      # serves cannot reject a policy encrypted for a different one.
-      - FIDENSUR_CONTRACT=${INSTRUCTION_SENDER:-}
+      # FIDENSUR_CONTRACT is deliberately NOT listed here.
+      #
+      # It comes from config/extension.env via env_file above. Setting it here as
+      # ${INSTRUCTION_SENDER:-} looked equivalent and was not: interpolation reads .env, which does
+      # not define INSTRUCTION_SENDER, so it resolved to an empty string — and `environment:`
+      # overrides `env_file:`, so the empty value won.
+      #
+      # The engine then refused to start, correctly: one that cannot tell which deployment it
+      # serves cannot reject a policy encrypted for a different one. The failure was loud and
+      # immediate, which is the right behaviour; the wiring was the bug.
     depends_on:
       - ext-proxy
 
