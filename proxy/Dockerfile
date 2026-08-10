@@ -20,7 +20,12 @@
 
 ARG TEE_PROXY_VERSION=v0.0.21
 
-FROM golang:1.25.1-alpine AS builder
+# Newer than the scaffold's golang:1.25.1-alpine, which cannot build this.
+#
+# tee-proxy v0.0.21's go.mod requires Go >= 1.25.8, so the scaffold's base fails at `go mod
+# download` with "go.mod requires go >= 1.25.8". The scaffold pins v0.0.18, where that constraint
+# did not yet exist — bumping the proxy version without bumping the toolchain is what broke it.
+FROM golang:1.26.5-alpine AS builder
 
 RUN apk add --no-cache git
 
@@ -43,8 +48,20 @@ RUN go mod download
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOFLAGS="-buildvcs=false" \
     go build -trimpath -ldflags="-buildid= -s -w" -o main ./cmd/proxy
 
+# The example config moved between releases: it sits at the repo root in v0.0.18, which the
+# scaffold's Dockerfile hard-codes, and under config/ from v0.0.21. Copying the wrong one fails the
+# build with a path error that says nothing about a version bump — which is exactly how this broke.
+#
+# Resolve it here instead, accepting either layout, so bumping TEE_PROXY_VERSION does not require
+# also knowing where that release happens to keep the file.
+RUN set -eux; \
+    for candidate in config/config.example.toml config.example.toml; do \
+      if [ -f "$candidate" ]; then cp "$candidate" /app/config.example.toml; break; fi; \
+    done; \
+    test -f /app/config.example.toml
+
 RUN if [ "${SOURCE_DATE_EPOCH:-0}" -gt 0 ] 2>/dev/null; then \
-      find /app/tee-proxy/main -exec touch -h -d @${SOURCE_DATE_EPOCH} {} +; \
+      touch -h -d @${SOURCE_DATE_EPOCH} /app/tee-proxy/main /app/config.example.toml; \
     fi
 
 FROM alpine:3.21
@@ -54,7 +71,7 @@ WORKDIR /app
 COPY --from=builder /app/tee-proxy/main .
 # Baked as a fallback only. docker-compose mounts the real config over this path, carrying the
 # indexer credentials — which is why those never enter the image.
-COPY --from=builder /app/tee-proxy/config.example.toml ./config/config.toml
+COPY --from=builder /app/config.example.toml ./config/config.toml
 
 RUN addgroup -g 1001 -S appgroup && \
     adduser -u 1001 -S appuser -G appgroup && \
