@@ -13,10 +13,28 @@
 # Security: host port 6674 exposes the proxy HTTP API. Anyone with the URL can call it. Testnet
 # only, and stop the tunnel when you are done.
 
+# Memory limits on every service.
+#
+# These exist so this stack can share a host with something else — an agent, another app — without
+# being able to starve it. Docker enforces them through cgroups: a container that reaches its limit
+# is killed by the kernel *at its own boundary*, before global memory is exhausted. Nothing else on
+# the machine is considered.
+#
+# Without limits the behaviour is quite different. Memory runs out globally and the OOM killer picks
+# a victim, scoring largely by size — so the biggest process on the box can be killed by a spike it
+# had nothing to do with. The limits make that impossible in this direction: Fidensur stops itself
+# first, always.
+#
+# Total ceiling is 1152 MB. Sized for a ~2 GB host with another service already resident, and
+# generous relative to actual use — the extension is a single static Go binary and redis holds a
+# queue, not a dataset.
 services:
   redis:
     image: redis:7-alpine
     command: redis-server --save "" --appendonly no
+    # Configured with no persistence and mounted on tmpfs, so everything it holds is RAM. The limit
+    # matters more here than it looks: if the enclave falls behind, the queue is what grows.
+    mem_limit: ${REDIS_MEM_LIMIT:-128m}
     ports:
       - "${REDIS_BIND:-127.0.0.1:6382}:6379"
     tmpfs:
@@ -24,6 +42,9 @@ services:
 
   ext-proxy:
     image: ${REGISTRY:-local}/tee-proxy
+    # The heaviest of the three in practice. Its initial sync pulls signing-policy history from the
+    # indexer database, which is the most likely moment for a transient spike.
+    mem_limit: ${PROXY_MEM_LIMIT:-384m}
     volumes:
       - ./config/proxy/extension_proxy.docker.toml:/app/config/config.toml:ro
     environment:
@@ -50,6 +71,10 @@ services:
     # extension itself on a machine with the memory for it.
     image: ${FIDENSUR_IMAGE:-ghcr.io/sniperchief/fidensur-extension}:${FIDENSUR_IMAGE_TAG:-latest}
     pull_policy: ${FIDENSUR_PULL_POLICY:-missing}
+    # Holds every computed allocation table and its Merkle tree in enclave memory. A full
+    # 4096-recipient round is well under a megabyte, so this ceiling is generous — it exists to
+    # bound growth across a long-running process, not to constrain any single computation.
+    mem_limit: ${EXTENSION_MEM_LIMIT:-512m}
     build:
       context: ./extension
       dockerfile: Dockerfile
@@ -101,6 +126,8 @@ services:
   types-server:
     image: ${FIDENSUR_TYPES_IMAGE:-ghcr.io/sniperchief/fidensur-types-server}:${FIDENSUR_IMAGE_TAG:-latest}
     pull_policy: ${FIDENSUR_PULL_POLICY:-missing}
+    # Stateless decoder — it holds nothing between requests.
+    mem_limit: ${TYPES_SERVER_MEM_LIMIT:-128m}
     build:
       context: ./extension
       dockerfile: Dockerfile.types-server
