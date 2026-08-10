@@ -393,6 +393,26 @@ jobs:
             -t ghcr.io/${REPO}-extension:${{ github.sha }} \
             ./extension
 
+      - name: Publish the tee-proxy image
+        # Flare publishes no image for tee-proxy — the scaffold builds it from source. Without this,
+        # every deployment has to compile it, which is exactly what a small host cannot do.
+        env:
+          SOURCE_DATE_EPOCH: ${{ steps.epoch.outputs.value }}
+        run: |
+          REPO=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          docker buildx build \
+            --builder ${{ steps.buildx.outputs.name }} \
+            --progress=plain \
+            --build-arg SOURCE_DATE_EPOCH=${{ steps.epoch.outputs.value }} \
+            --build-arg TEE_PROXY_VERSION=${TEE_PROXY_VERSION:-v0.0.21} \
+            --provenance=false \
+            --sbom=false \
+            --push \
+            -f proxy/Dockerfile \
+            -t ghcr.io/${REPO}-tee-proxy:latest \
+            -t ghcr.io/${REPO}-tee-proxy:${{ github.sha }} \
+            ./proxy
+
       - name: Publish the types-server image
         env:
           SOURCE_DATE_EPOCH: ${{ steps.epoch.outputs.value }}

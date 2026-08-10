@@ -41,7 +41,17 @@ services:
       - /data
 
   ext-proxy:
-    image: ${REGISTRY:-local}/tee-proxy
+    # Flare does not publish tee-proxy as an image — the scaffold builds it from source, which is
+    # why `local/tee-proxy` resolves to nothing on a fresh host. CI builds it from proxy/Dockerfile
+    # and publishes here so a small machine can pull rather than compile.
+    image: ${FIDENSUR_PROXY_IMAGE:-ghcr.io/sniperchief/fidensur-tee-proxy}:${FIDENSUR_IMAGE_TAG:-latest}
+    pull_policy: ${FIDENSUR_PULL_POLICY:-missing}
+    build:
+      context: ./proxy
+      dockerfile: Dockerfile
+      args:
+        TEE_PROXY_VERSION: ${TEE_PROXY_VERSION:-v0.0.21}
+        SOURCE_DATE_EPOCH: ${SOURCE_DATE_EPOCH:-0}
     # The heaviest of the three in practice. Its initial sync pulls signing-policy history from the
     # indexer database, which is the most likely moment for a transient spike.
     mem_limit: ${PROXY_MEM_LIMIT:-384m}
