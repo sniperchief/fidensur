@@ -93,6 +93,73 @@ pre code {
   padding: 0;
 }
 
+/* ---------- site header ---------- */
+
+.site-header {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+  padding: 0.85rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.site-header .brand {
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--fg);
+  text-decoration: none;
+  letter-spacing: -0.01em;
+}
+
+.site-header nav {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.93rem;
+  /* Pushes the wallet control to the far right without a spacer element. */
+  margin-right: auto;
+}
+
+.wallet-btn {
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+  padding: 0.4rem 0.85rem;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.wallet-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.wallet-btn.warn {
+  background: var(--warn);
+}
+
+.wallet-btn.ghost {
+  background: none;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  font-weight: 500;
+}
+
+.wallet-account {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.wallet-link {
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
 /* ---------- landing ---------- */
 
 .landing {
@@ -180,6 +247,158 @@ pre code {
 .facts dd {
   margin: 0;
   text-align: right;
+}
+
+/* ---------- console and forms ---------- */
+
+.console {
+  max-width: 52rem;
+  margin: 0 auto;
+  padding: 3rem 1.25rem 6rem;
+}
+
+.console h1 {
+  font-size: 2rem;
+  margin: 0 0 0.25rem;
+}
+
+.console .tagline {
+  color: var(--muted);
+  margin: 0 0 2rem;
+}
+
+.step {
+  margin: 0 0 2.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.step h2 {
+  font-size: 1.2rem;
+  margin: 0 0 0.4rem;
+}
+
+/* Why this step exists, not what to type. A form that only labels its inputs teaches nothing. */
+.step .why {
+  color: var(--muted);
+  font-size: 0.95rem;
+  margin: 0 0 1.25rem;
+}
+
+.hint {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin: 0.35rem 0 0;
+}
+
+.field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin: 0 0 1.25rem;
+  flex: 1 1 12rem;
+}
+
+.field-row {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.field-group > .label {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.text-input {
+  font: inherit;
+  font-size: 0.95rem;
+  padding: 0.55rem 0.7rem;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  width: 100%;
+}
+
+.text-input.mono {
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+textarea.text-input {
+  resize: vertical;
+}
+
+.mode-row {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.mode-btn {
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 0.4rem 0.9rem;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.mode-btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.builder {
+  margin: 0 0 1.5rem;
+}
+
+.problems {
+  margin: 0.5rem 0 0;
+  padding-left: 1.2rem;
+  font-size: 0.9rem;
+}
+
+.problems li {
+  margin: 0.15rem 0;
+}
+
+/* Round listing. Wrapped in its own scroll container so a narrow screen scrolls the table rather
+ * than the whole page sideways. */
+.rounds {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+  display: block;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.rounds th,
+.rounds td {
+  text-align: left;
+  padding: 0.55rem 0.9rem 0.55rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.rounds th {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.rounds tbody tr:last-child td {
+  border-bottom: none;
 }
 
 /* ---------- verification report ---------- */

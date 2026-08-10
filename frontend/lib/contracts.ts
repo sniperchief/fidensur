@@ -375,6 +375,15 @@ export const FIDENSUR_EVENTS_ABI = [
   },
   {
     type: "event",
+    name: "DisclosureRequested",
+    inputs: [
+      { name: "roundId", type: "uint256", indexed: true },
+      { name: "requester", type: "address", indexed: true },
+      { name: "instructionId", type: "bytes32", indexed: true },
+    ],
+  },
+  {
+    type: "event",
     name: "RoundFinalized",
     inputs: [
       { name: "roundId", type: "uint256", indexed: true },
