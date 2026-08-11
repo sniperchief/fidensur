@@ -763,6 +763,37 @@ should be re-checked against a live deployment.
 | A9 | The types server (port 8100) is optional infrastructure the app may host | present in weather-insurance, absent from the scaffold's required surface | Low |
 | A10 | `keccak256(abi.encode(...))` commitments are the intended link between on-chain state and TEE-held secrets | weather-insurance `termsCommitment` | Low |
 
+### 12.1 Settled by the first live round — 10 Aug 2026
+
+`./scripts/test.sh` ran a complete round against the Coston2 deployment (round 1 on
+`0xF4711694…`). The original entries above are left unedited as the research record; this is what
+the run actually decided.
+
+| # | Outcome |
+| --- | --- |
+| **A2** | **Confirmed.** `COMPUTE` acknowledged with status 2 and delivered via `POST localhost:$SIGN_PORT/result`; the signed result arrived and verified. |
+| **A3** | **Confirmed, and it was the point of the exercise.** The browser's `lib/ecies.ts` ciphertext was decrypted by `tee-node`, and the enclave's disclosure was decrypted by the browser. No self-test could have established this — two identically wrong implementations round-trip perfectly. |
+| **A4** | **Confirmed.** The proxy reported `submissionTag: "submit"` and `finalizeRound` accepted a signature computed over it. |
+| **A5** | **Confirmed.** Status 1 relayed and verified on-chain. |
+| **A8** | **Confirmed.** `DISCLOSE` located the table `COMPUTE` had built, keyed by policy commitment, in a later instruction on the same enclave. |
+
+**A6 remains untested** — the round paid the fee but never checked whether the unused portion came
+back to `claimBackAddress`.
+
+Two documentation gaps from §11 also closed:
+
+- **Item 7, the result endpoint.** It is `GET {proxy}/action/result/{actionId}`, and the response is
+  `types.ActionResponse`: `{ result: {...}, signature, proxySignature }` — with **the signature a
+  sibling of `result`, not a field inside it**. Authority is `fccutils.ActionResult` in the Flare
+  scaffold, whose comment marks it "do not modify".
+- **Item 10, the fee.** The scaffold sends `opts.Value = big.NewInt(1000000)` — 1,000,000 wei per
+  instruction. Still not a published schedule, but it is what the reference tooling uses and it
+  worked.
+
+One gap the run did **not** close, and could not: `tee-proxy` serves no CORS headers, so no browser
+can read any of these endpoints. The script runs in Node, which does not enforce CORS. See
+`deployment.md` Phase 6.
+
 ---
 
 ## 13. Source Provenance

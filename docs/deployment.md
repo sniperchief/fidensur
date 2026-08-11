@@ -9,9 +9,12 @@ End-to-end, from a fresh machine to a verified confidential round.
 | Contract | [`0xF471169436d475917A63780EF13d9a4320c914b9`](https://coston2-explorer.flare.network/address/0xF471169436d475917A63780EF13d9a4320c914b9) |
 | Extension ID | 65818 (`0x1011a`) |
 | Deployer | `0xf540e9E4417d1326f533A839Cfb683b80C57F161` |
-| Remaining | TEE stack — needs a host with Docker |
+| TEE machine | `0x84893f5D7D8FD55c6Ce834e45A41997E05C7B9F6` — PRODUCTION, simulated attestation |
+| Data-provider URL | `http://206.72.199.199:6674` (on-chain) |
+| Browser URL | `https://206.72.199.199.nip.io` (Caddy, see Phase 6) |
+| Status | Live. Round 1 completed end to end on 10 Aug 2026 |
 
-Phases 1–2 are **done**. This document covers 3–5.
+Phases 1–2 are **done**. This document covers 3–6.
 
 ---
 
@@ -60,6 +63,11 @@ reports an error. Machines stuck at `INITIALIZED` are usually this.
 | Reserved ngrok domain | Fine — stable hostname |
 | `trycloudflare` quick tunnel | **Never** — hostname changes on every restart |
 | ngrok free ephemeral URL | **Avoid** — same failure |
+
+> This URL is for **data providers**, which are servers. The browser needs a different one — see
+> [Phase 6](#phase-6--let-the-browser-reach-the-proxy). Serving only this port produces a
+> deployment that registers correctly, passes every check, and still has a frontend that cannot
+> function.
 
 With a public IP, open the port and use it directly:
 
@@ -241,6 +249,117 @@ Look for `status: 2 = PRODUCTION`. On a current stack a simulated TEE reaches it
 
 ---
 
+## Phase 6 — Let the browser reach the proxy
+
+Everything above produces a working deployment that a **browser cannot use**. The frontend will
+load, read the chain, and send transactions — and then fail at every step that needs the proxy:
+requesting a computation result, requesting a disclosure, and showing the attestation report.
+
+Two independent reasons, both of which the Caddy layer below fixes at once.
+
+### 6.1 tee-proxy sends no CORS headers
+
+Confirmed against a live deployment:
+
+```console
+$ curl -sD - -o /dev/null -H "Origin: https://example.com" http://<ip>:6674/info
+HTTP/1.1 200 OK
+Content-Type: application/json
+Date: Tue, 11 Aug 2026 10:24:44 GMT
+Content-Length: 1768
+```
+
+No `Access-Control-Allow-Origin`. A browser will make that request, receive that response, and then
+refuse to hand it to JavaScript — because the response never granted permission. `curl` and any
+server-side client are unaffected, which is exactly why this survives testing: `scripts/test.sh`
+runs in Node, and **Node does not enforce CORS at all**. A green end-to-end run proves nothing about
+whether the browser can do the same thing.
+
+This applies to `http://localhost:3000` too. It is not a deployment problem; it is a browser
+problem, and it is present from the first moment you open the app.
+
+### 6.2 Mixed content
+
+Any frontend served over HTTPS — Vercel, Netlify, GitHub Pages — cannot fetch `http://`. Browsers
+block it outright as mixed content. So even with CORS solved, a plain-HTTP proxy is unreachable from
+a deployed frontend.
+
+### 6.3 Put Caddy in front — and leave 6674 alone
+
+The fix is a second door, not a replacement. Data providers push to the URL written on-chain during
+registration; changing what serves that port means re-registering. So Caddy listens on 443 and
+forwards to 6674, which keeps serving exactly as before.
+
+```bash
+sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' \
+  | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' \
+  | sudo tee /etc/apt/sources.list.d/caddy-stable.list
+sudo apt update
+sudo NEEDRESTART_MODE=l apt install -y caddy
+```
+
+> **`NEEDRESTART_MODE=l` is not optional on a co-tenanted box.** Ubuntu's `needrestart` will
+> otherwise offer to restart `docker.service`, and restarting Docker restarts `extension-tee` —
+> whose signing key is generated fresh in memory on every boot. That silently invalidates the TEE
+> registration and `teeAddress()`, and takes down anything else sharing the host. `l` means
+> *list only*.
+
+`/etc/caddy/Caddyfile`, using [nip.io](https://nip.io) so no domain purchase is needed —
+`<ip>.nip.io` resolves straight to `<ip>`, which is enough for Let's Encrypt to issue a certificate:
+
+```caddyfile
+206.72.199.199.nip.io {
+    reverse_proxy 127.0.0.1:6674
+
+    header {
+        Access-Control-Allow-Origin *
+        Access-Control-Allow-Methods "GET, POST, OPTIONS"
+        Access-Control-Allow-Headers "Content-Type"
+    }
+
+    @options method OPTIONS
+    respond @options 204
+}
+```
+
+`Access-Control-Allow-Origin *` is correct here rather than lax: the proxy serves attestation
+metadata and signed results that are already public by construction, and it holds no cookies or
+session state that a hostile origin could ride.
+
+```bash
+sudo caddy validate --config /etc/caddy/Caddyfile
+sudo ufw allow 80/tcp && sudo ufw allow 443/tcp     # 80 is needed for the ACME challenge
+sudo systemctl daemon-reload && sudo systemctl restart caddy
+```
+
+Verify, allowing ~30 seconds for the certificate:
+
+```console
+$ curl -sI https://206.72.199.199.nip.io/info | head -4
+HTTP/2 200
+access-control-allow-headers: Content-Type
+access-control-allow-methods: GET, POST, OPTIONS
+access-control-allow-origin: *
+```
+
+### 6.4 Point the frontend at it
+
+```bash
+# frontend/.env.local, and the same value in your host's environment variables
+NEXT_PUBLIC_FIDENSUR_CONTRACT=0xF471169436d475917A63780EF13d9a4320c914b9
+NEXT_PUBLIC_EXT_PROXY_URL=https://206.72.199.199.nip.io
+```
+
+One value serves both local development and a deployed frontend: an `http://localhost` page may
+fetch `https://`, only the reverse is blocked. Next reads these at startup, so restart the dev
+server after changing them.
+
+Caddy costs about 30 MB resident, which matters if the host is shared.
+
+---
+
 ## Troubleshooting
 
 | Symptom | Cause |
@@ -253,19 +372,29 @@ Look for `status: 2 = PRODUCTION`. On a current stack a simulated TEE reaches it
 | `code hashes do not match` | `MODE` and `SIMULATED_TEE` disagree. Simulated: `MODE=1` + `true`. Real: `MODE=0` + `false` |
 | `MachineManager.TooMany()` | `EXTENSION_ID` does not match `extensionId()` on-chain |
 | Proxy healthy but no instructions | Indexer DB credentials wrong. Check `docker compose logs ext-proxy` |
+| Frontend works except anything needing the proxy | No CORS headers — see [Phase 6](#phase-6--let-the-browser-reach-the-proxy). `curl` succeeds while the browser console shows a CORS error |
+| Deployed frontend blocked, localhost fine over http | Mixed content. An HTTPS page cannot fetch `http://` |
 
 ---
 
 ## What a working deployment proves
 
-Once a round completes end to end:
+`./scripts/test.sh` ran a full round against this deployment on 10 Aug 2026 — round 1 on
+`0xF4711694…`, finalized on-chain. It settled three things that no local test could:
 
-1. **ECIES interoperability with go-ethereum** — the one thing that cannot be verified locally. The
-   browser encrypts the policy and the enclave decrypts it; a self-test proves only internal
-   consistency, since two identically wrong implementations round-trip perfectly.
+1. **ECIES interoperability with go-ethereum.** The browser encrypted the policy and the enclave
+   decrypted it, then the enclave encrypted a disclosure and the browser decrypted that. This was
+   assumption **A3** in `fcc-research.md`, and a self-test could never have confirmed it: two
+   identically wrong implementations round-trip against each other perfectly.
 2. **The full instruction lifecycle** — contract → registry → proxy → node → extension → signed
-   result → on-chain verification.
-3. **The verification explorer against real attestation data**, rather than fixtures.
+   result → on-chain verification, with the signature verified independently in TypeScript and in
+   Solidity.
+3. **The Merkle scheme across four implementations.** The proof was built in Go, checked in
+   TypeScript, and spent against Solidity.
 
-Until then, everything else is verified: 178 tests, a reproducible image built identically on two
-independent machines, and a contract deployed and registered on Coston2.
+What it did **not** prove, and what Phase 6 exists to fix: that a *browser* can do any of this. The
+script runs in Node, which does not enforce CORS, so it passed against a proxy no browser could
+reach.
+
+Alongside that: 179 tests, and a reproducible image built to an identical digest on two independent
+machines.
