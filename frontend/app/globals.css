@@ -1,50 +1,96 @@
-/* Fidensur — shared styles.
+/* Fidensur — design system.
  *
- * Written for legibility over decoration. The verification report is meant to be read carefully by
- * someone who does not trust it, so hashes are monospaced and never truncated where the exact value
- * matters, pass/fail is stated in words rather than colour alone, and raw values sit beside every
- * verdict rather than behind a disclosure triangle.
+ * Two audiences with opposite needs, served by one stylesheet.
  *
- * Colour is never the only signal. "PASS"/"FAIL" are words, so the page still works in greyscale,
- * for colour-blind readers, and in a printout.
+ * The **verification report** is read by someone who does not trust it. There, decoration is a
+ * liability: hashes stay monospaced and untruncated where the exact value matters, verdicts are
+ * words rather than colour alone, and raw values sit beside every conclusion instead of behind a
+ * disclosure triangle. That restraint is deliberate and is preserved below.
+ *
+ * The **console and portal** are working tools. Restraint there just reads as unfinished, so they
+ * get real hierarchy, depth and motion — without ever dressing up a claim the product cannot make.
+ *
+ * Colour is never the only signal anywhere. PASS/FAIL are words, so every page still works in
+ * greyscale, in print, and for colour-blind readers.
  */
 
 :root {
   --bg: #ffffff;
-  --fg: #1a1a1a;
-  --muted: #5c6370;
-  --border: #e1e4e8;
-  --surface: #f6f8fa;
-  --accent: #0b5fff;
+  --bg-subtle: #f7f8fa;
+  --surface: #ffffff;
+  --surface-2: #f2f4f7;
+
+  --fg: #10131a;
+  --fg-muted: #5b6472;
+  --fg-subtle: #838d9c;
+
+  --border: #e3e7ed;
+  --border-strong: #cfd6e0;
+
+  --accent: #4f46e5;
+  --accent-hover: #4338ca;
+  --accent-soft: #eef2ff;
+  --accent-ring: rgba(79, 70, 229, 0.35);
+
   --pass: #0f7b3f;
   --pass-bg: #eaf7ef;
+  --pass-border: #a9dcbf;
   --fail: #b3261e;
   --fail-bg: #fdecea;
+  --fail-border: #f0b4ae;
   --warn: #8a5a00;
   --warn-bg: #fff8e5;
+  --warn-border: #ecd9a3;
   --unknown: #4a4a4a;
-  --unknown-bg: #f0f0f0;
+  --unknown-bg: #f2f3f5;
+  --unknown-border: #dcdfe4;
+
+  --shadow-sm: 0 1px 2px rgba(16, 19, 26, 0.06);
+  --shadow-md: 0 4px 16px rgba(16, 19, 26, 0.08);
+  --shadow-lg: 0 20px 60px rgba(16, 19, 26, 0.18);
+
+  --radius: 10px;
+  --radius-lg: 14px;
 
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0d1117;
-    --fg: #e6edf3;
-    --muted: #8b949e;
-    --border: #30363d;
-    --surface: #161b22;
-    --accent: #58a6ff;
-    --pass: #3fb950;
-    --pass-bg: #10281a;
-    --fail: #f85149;
-    --fail-bg: #2d1213;
-    --warn: #d29922;
-    --warn-bg: #2b2412;
-    --unknown: #9da7b3;
-    --unknown-bg: #1c2128;
+    --bg: #0b0d12;
+    --bg-subtle: #0f1218;
+    --surface: #141821;
+    --surface-2: #1b2029;
+
+    --fg: #e7ecf3;
+    --fg-muted: #9aa5b4;
+    --fg-subtle: #74808f;
+
+    --border: #262c38;
+    --border-strong: #37404f;
+
+    --accent: #818cf8;
+    --accent-hover: #a5b0ff;
+    --accent-soft: #1b1f3a;
+    --accent-ring: rgba(129, 140, 248, 0.4);
+
+    --pass: #4ade80;
+    --pass-bg: #0f2419;
+    --pass-border: #1f5136;
+    --fail: #fb7185;
+    --fail-bg: #2a1218;
+    --fail-border: #5c2430;
+    --warn: #fbbf24;
+    --warn-bg: #2a2210;
+    --warn-border: #5a4715;
+    --unknown: #9aa5b4;
+    --unknown-bg: #171c24;
+    --unknown-border: #2b323d;
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+    --shadow-md: 0 4px 18px rgba(0, 0, 0, 0.5);
+    --shadow-lg: 0 24px 70px rgba(0, 0, 0, 0.65);
   }
 }
 
@@ -54,35 +100,49 @@
 
 body {
   margin: 0;
-  padding: 0;
   background: var(--bg);
   color: var(--fg);
   font-family: var(--sans);
-  line-height: 1.6;
+  font-size: 16px;
+  line-height: 1.65;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 a {
   color: var(--accent);
+  text-decoration-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  text-underline-offset: 2px;
+}
+
+a:hover {
+  color: var(--accent-hover);
+}
+
+h1,
+h2,
+h3 {
+  letter-spacing: -0.018em;
+  line-height: 1.25;
 }
 
 code {
   font-family: var(--mono);
   font-size: 0.86em;
-  background: var(--surface);
+  background: var(--surface-2);
   border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 0.1em 0.35em;
+  border-radius: 5px;
+  padding: 0.1em 0.36em;
   /* Hashes are long and must stay readable rather than overflow the viewport on a phone. */
   word-break: break-all;
 }
 
 pre {
   font-family: var(--mono);
-  font-size: 0.82rem;
-  background: var(--surface);
+  font-size: 0.8rem;
+  background: var(--surface-2);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius);
   padding: 0.9rem 1rem;
   overflow-x: auto;
 }
@@ -93,16 +153,95 @@ pre code {
   padding: 0;
 }
 
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ---------- buttons ---------- */
+
+.btn,
+.wallet-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 600;
+  line-height: 1;
+  padding: 0.62rem 1.1rem;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.06s ease,
+    box-shadow 0.15s ease;
+}
+
+.btn:active:not(:disabled),
+.wallet-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.btn:disabled,
+.wallet-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-primary,
+.wallet-btn {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-primary:hover:not(:disabled),
+.wallet-btn:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.btn-ghost,
+.wallet-btn.ghost {
+  background: transparent;
+  color: var(--fg-muted);
+  border-color: var(--border-strong);
+  box-shadow: none;
+}
+
+.btn-ghost:hover:not(:disabled),
+.wallet-btn.ghost:hover:not(:disabled) {
+  background: var(--surface-2);
+  color: var(--fg);
+}
+
+.btn-warn,
+.wallet-btn.warn {
+  background: var(--warn);
+  color: #fff;
+}
+
+.btn-sm {
+  font-size: 0.82rem;
+  padding: 0.38rem 0.7rem;
+}
+
 /* ---------- site header ---------- */
 
 .site-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
   display: flex;
   align-items: center;
-  gap: 1.25rem;
+  gap: 1.5rem;
   flex-wrap: wrap;
-  padding: 0.85rem 1.25rem;
+  padding: 0.7rem 1.5rem;
   border-bottom: 1px solid var(--border);
-  background: var(--surface);
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  backdrop-filter: blur(10px);
 }
 
 .site-header .brand {
@@ -110,79 +249,242 @@ pre code {
   font-size: 1.05rem;
   color: var(--fg);
   text-decoration: none;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
 }
 
 .site-header nav {
   display: flex;
-  gap: 1rem;
-  font-size: 0.93rem;
-  /* Pushes the wallet control to the far right without a spacer element. */
+  gap: 0.35rem;
   margin-right: auto;
 }
 
-.wallet-btn {
-  font: inherit;
-  font-size: 0.88rem;
-  font-weight: 600;
-  padding: 0.4rem 0.85rem;
-  background: var(--accent);
-  color: #fff;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-.wallet-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.wallet-btn.warn {
-  background: var(--warn);
-}
-
-.wallet-btn.ghost {
-  background: none;
-  color: var(--muted);
-  border: 1px solid var(--border);
+.site-header nav a {
+  color: var(--fg-muted);
+  text-decoration: none;
+  font-size: 0.92rem;
   font-weight: 500;
+  padding: 0.35rem 0.7rem;
+  border-radius: 7px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.site-header nav a:hover {
+  background: var(--surface-2);
+  color: var(--fg);
 }
 
 .wallet-account {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.55rem;
+  padding: 0.28rem 0.32rem 0.28rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
 }
 
-.wallet-link {
-  font-size: 0.88rem;
-  font-weight: 600;
+.wallet-account .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--pass);
+  flex: none;
 }
 
-/* ---------- landing ---------- */
+.wallet-account code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.85rem;
+}
 
-.landing {
-  max-width: 46rem;
+/* ---------- wallet chooser ---------- */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+  background: rgba(8, 10, 15, 0.55);
+  backdrop-filter: blur(3px);
+  animation: fade 0.15s ease;
+}
+
+.modal {
+  width: 100%;
+  max-width: 25rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: 1.1rem 1.1rem 0.9rem;
+  animation: rise 0.18s ease;
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.9rem;
+}
+
+.modal-head h2 {
+  font-size: 1.05rem;
+  margin: 0;
+}
+
+.wallet-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.wallet-option {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 500;
+  text-align: left;
+  padding: 0.65rem 0.75rem;
+  background: var(--surface);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.wallet-option:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.wallet-option:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.wallet-option img {
+  border-radius: 7px;
+  flex: none;
+}
+
+.wallet-fallback-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.85rem;
+  flex: none;
+}
+
+.wallet-name {
+  margin-right: auto;
+}
+
+.wallet-state {
+  font-size: 0.78rem;
+  color: var(--fg-subtle);
+}
+
+.modal-empty {
+  text-align: center;
+  padding: 0.5rem 0 1rem;
+}
+
+.modal-empty p {
+  margin: 0 0 0.5rem;
+}
+
+.modal-error {
+  margin: 0.8rem 0 0;
+  font-size: 0.86rem;
+  color: var(--fail);
+}
+
+.modal-foot {
+  margin: 0.9rem 0 0;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--border);
+  text-align: center;
+}
+
+/* ---------- shared page furniture ---------- */
+
+.landing,
+.console,
+.verify {
+  max-width: 54rem;
   margin: 0 auto;
-  padding: 4rem 1.25rem 6rem;
+  padding: 3.5rem 1.5rem 7rem;
 }
 
 .landing h1 {
-  font-size: 2.5rem;
-  margin: 0 0 0.25rem;
-  letter-spacing: -0.02em;
+  font-size: clamp(2.4rem, 6vw, 3.4rem);
+  margin: 0 0 0.5rem;
+  letter-spacing: -0.035em;
+  background: linear-gradient(135deg, var(--fg) 30%, var(--accent) 130%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.console h1,
+.verify h1 {
+  font-size: 2rem;
+  margin: 0 0 0.3rem;
 }
 
 .landing .tagline {
-  font-size: 1.15rem;
-  color: var(--muted);
+  font-size: 1.2rem;
+  color: var(--fg-muted);
+  margin: 0 0 2.5rem;
+  max-width: 34rem;
+}
+
+.console .tagline,
+.verify .tagline {
+  color: var(--fg-muted);
   margin: 0 0 2.5rem;
 }
 
-.landing h2 {
+.landing h2,
+.console h2,
+.verify h2 {
   font-size: 1.15rem;
   margin: 2.5rem 0 0.75rem;
+}
+
+.hint {
+  color: var(--fg-muted);
+  font-size: 0.86rem;
+  margin: 0.4rem 0 0;
 }
 
 .lookup {
@@ -195,42 +497,98 @@ pre code {
 .lookup input {
   flex: 1 1 12rem;
   font-family: var(--mono);
-  font-size: 1rem;
-  padding: 0.6rem 0.75rem;
-  background: var(--bg);
+  font-size: 0.95rem;
+  padding: 0.62rem 0.8rem;
+  background: var(--surface);
   color: var(--fg);
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
 }
 
 .lookup button {
   font: inherit;
+  font-size: 0.92rem;
   font-weight: 600;
-  padding: 0.6rem 1.25rem;
+  padding: 0.62rem 1.2rem;
   background: var(--accent);
   color: #fff;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius);
   cursor: pointer;
 }
 
 .lookup button:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
+.hero-actions {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin: 0 0 1rem;
+}
+
+.hero-actions .btn {
+  padding: 0.7rem 1.35rem;
+  font-size: 0.95rem;
+}
+
+/* Numbered explanation of the mechanism. Four cards rather than four paragraphs, because the order
+ * is the point and a wall of prose hides it. */
+.steps-grid {
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 0.85rem;
+}
+
+.steps-grid li {
+  padding: 1.15rem 1.2rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.steps-grid .step-num {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--accent);
+}
+
+.steps-grid h3 {
+  font-size: 1rem;
+  margin: 0.35rem 0 0.4rem;
+}
+
+.steps-grid p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--fg-muted);
+  line-height: 1.6;
+}
+
+/* Key/value list. Used everywhere; the workhorse. */
 .facts {
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 0.25rem 1rem;
+  border-radius: var(--radius-lg);
+  padding: 0.25rem 1.1rem;
   background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  margin: 1rem 0;
 }
 
 .facts div {
   display: flex;
   gap: 1rem;
   justify-content: space-between;
-  padding: 0.5rem 0;
+  align-items: baseline;
+  padding: 0.62rem 0;
   border-bottom: 1px solid var(--border);
   flex-wrap: wrap;
 }
@@ -240,61 +598,63 @@ pre code {
 }
 
 .facts dt {
-  color: var(--muted);
+  color: var(--fg-muted);
   font-size: 0.9rem;
 }
 
 .facts dd {
   margin: 0;
   text-align: right;
+  font-weight: 500;
 }
 
-/* ---------- console and forms ---------- */
-
-.console {
-  max-width: 52rem;
-  margin: 0 auto;
-  padding: 3rem 1.25rem 6rem;
-}
-
-.console h1 {
-  font-size: 2rem;
-  margin: 0 0 0.25rem;
-}
-
-.console .tagline {
-  color: var(--muted);
-  margin: 0 0 2rem;
-}
+/* ---------- console ---------- */
 
 .step {
-  margin: 0 0 2.5rem;
-  padding-top: 1.5rem;
-  border-top: 1px solid var(--border);
+  margin: 0 0 1.25rem;
+  padding: 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
 }
 
 .step h2 {
-  font-size: 1.2rem;
-  margin: 0 0 0.4rem;
+  font-size: 1.15rem;
+  margin: 0 0 0.35rem;
 }
 
 /* Why this step exists, not what to type. A form that only labels its inputs teaches nothing. */
 .step .why {
-  color: var(--muted);
-  font-size: 0.95rem;
-  margin: 0 0 1.25rem;
+  color: var(--fg-muted);
+  font-size: 0.93rem;
+  margin: 0 0 1.35rem;
+  max-width: 44rem;
 }
 
-.hint {
-  color: var(--muted);
-  font-size: 0.85rem;
-  margin: 0.35rem 0 0;
+.gate {
+  text-align: center;
+  padding: 3.5rem 1.5rem;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--bg-subtle);
+}
+
+.gate h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.2rem;
+}
+
+.gate p {
+  color: var(--fg-muted);
+  margin: 0 auto 1.4rem;
+  max-width: 30rem;
 }
 
 .field-group {
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
+  gap: 0.35rem;
   margin: 0 0 1.25rem;
   flex: 1 1 12rem;
 }
@@ -307,27 +667,35 @@ pre code {
 }
 
 .field-group > .label {
-  font-size: 0.78rem;
+  font-size: 0.74rem;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--muted);
+  letter-spacing: 0.06em;
+  color: var(--fg-muted);
+  font-weight: 600;
 }
 
 .text-input {
   font: inherit;
   font-size: 0.95rem;
-  padding: 0.55rem 0.7rem;
+  padding: 0.6rem 0.75rem;
   background: var(--bg);
   color: var(--fg);
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
   width: 100%;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.text-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-ring);
 }
 
 .text-input.mono {
   font-family: var(--mono);
   font-size: 0.85rem;
-  line-height: 1.5;
+  line-height: 1.6;
 }
 
 textarea.text-input {
@@ -336,23 +704,30 @@ textarea.text-input {
 
 .mode-row {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.4rem;
   flex-wrap: wrap;
 }
 
 .mode-btn {
   font: inherit;
   font-size: 0.9rem;
-  padding: 0.4rem 0.9rem;
-  background: var(--bg);
-  color: var(--fg);
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  font-weight: 500;
+  padding: 0.45rem 0.95rem;
+  background: var(--surface);
+  color: var(--fg-muted);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
   cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.mode-btn:hover {
+  color: var(--fg);
 }
 
 .mode-btn.active {
   border-color: var(--accent);
+  background: var(--accent-soft);
   color: var(--accent);
   font-weight: 600;
 }
@@ -371,8 +746,8 @@ textarea.text-input {
   margin: 0.15rem 0;
 }
 
-/* Round listing. Wrapped in its own scroll container so a narrow screen scrolls the table rather
- * than the whole page sideways. */
+/* Round listing. Its own scroll container, so a narrow screen scrolls the table rather than the
+ * whole page sideways. */
 .rounds {
   width: 100%;
   border-collapse: collapse;
@@ -385,16 +760,20 @@ textarea.text-input {
 .rounds th,
 .rounds td {
   text-align: left;
-  padding: 0.55rem 0.9rem 0.55rem 0;
+  padding: 0.62rem 1.1rem 0.62rem 0;
   border-bottom: 1px solid var(--border);
 }
 
 .rounds th {
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--muted);
+  letter-spacing: 0.06em;
+  color: var(--fg-muted);
   font-weight: 600;
+}
+
+.rounds tbody tr:hover td {
+  background: var(--bg-subtle);
 }
 
 .rounds tbody tr:last-child td {
@@ -403,54 +782,38 @@ textarea.text-input {
 
 /* ---------- verification report ---------- */
 
-.verify {
-  max-width: 52rem;
-  margin: 0 auto;
-  padding: 3rem 1.25rem 6rem;
-}
-
-.verify h1 {
-  font-size: 2rem;
-  margin: 0 0 0.25rem;
-}
-
-.verify .tagline {
-  color: var(--muted);
-  margin: 0 0 2rem;
-}
-
 .verify .summary {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
-  gap: 1rem;
+  gap: 1.25rem;
   margin: 0 0 2.5rem;
-  padding: 1rem;
+  padding: 1.25rem;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   background: var(--surface);
+  box-shadow: var(--shadow-sm);
 }
 
 .verify .summary dt {
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--muted);
+  letter-spacing: 0.06em;
+  color: var(--fg-muted);
+  font-weight: 600;
 }
 
 .verify .summary dd {
-  margin: 0.2rem 0 0;
+  margin: 0.25rem 0 0;
   font-weight: 600;
 }
 
 .verify section {
   margin: 0 0 2.75rem;
-  padding-top: 1.5rem;
+  padding-top: 1.75rem;
   border-top: 1px solid var(--border);
 }
 
 .verify h2 {
-  font-size: 1.2rem;
-  margin: 0 0 0.4rem;
   display: flex;
   gap: 0.6rem;
   align-items: baseline;
@@ -458,31 +821,31 @@ textarea.text-input {
 
 .verify h2 .num {
   font-family: var(--mono);
-  font-size: 0.85rem;
-  color: var(--muted);
-  border: 1px solid var(--border);
+  font-size: 0.8rem;
+  color: var(--fg-muted);
+  border: 1px solid var(--border-strong);
   border-radius: 50%;
-  width: 1.6rem;
-  height: 1.6rem;
+  width: 1.65rem;
+  height: 1.65rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex: none;
 }
 
-/* Why the question matters. Deliberately prominent: a verification page that only shows verdicts
- * is asking to be trusted, which is the opposite of the point. */
+/* Why the question matters. Deliberately prominent: a verification page that shows only verdicts is
+ * asking to be trusted, which is the opposite of the point. */
 .verify .why {
-  color: var(--muted);
-  font-size: 0.95rem;
+  color: var(--fg-muted);
+  font-size: 0.94rem;
   margin: 0 0 1.25rem;
 }
 
 .verify .note {
-  color: var(--muted);
-  font-size: 0.9rem;
-  border-left: 2px solid var(--border);
-  padding-left: 0.9rem;
+  color: var(--fg-muted);
+  font-size: 0.89rem;
+  border-left: 2px solid var(--border-strong);
+  padding-left: 0.95rem;
   margin: 1rem 0 0;
 }
 
@@ -492,19 +855,21 @@ textarea.text-input {
   grid-template-columns: auto 1fr;
   gap: 0.5rem 0.75rem;
   align-items: baseline;
-  padding: 0.7rem 0.9rem;
+  padding: 0.8rem 1rem;
   margin: 0 0 0.6rem;
   border: 1px solid var(--border);
   border-left-width: 3px;
-  border-radius: 6px;
+  border-radius: var(--radius);
 }
 
 .check.pass {
+  border-color: var(--pass-border);
   border-left-color: var(--pass);
   background: var(--pass-bg);
 }
 
 .check.fail {
+  border-color: var(--fail-border);
   border-left-color: var(--fail);
   background: var(--fail-bg);
 }
@@ -512,11 +877,11 @@ textarea.text-input {
 /* Text, not just colour — readable in greyscale, in print, and to colour-blind readers. */
 .check .mark {
   font-family: var(--mono);
-  font-size: 0.7rem;
+  font-size: 0.68rem;
   font-weight: 700;
-  letter-spacing: 0.06em;
-  padding: 0.15rem 0.4rem;
-  border-radius: 3px;
+  letter-spacing: 0.08em;
+  padding: 0.18rem 0.42rem;
+  border-radius: 4px;
 }
 
 .check.pass .mark {
@@ -530,19 +895,19 @@ textarea.text-input {
 }
 
 .check .label {
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .check .value {
   grid-column: 2;
   font-size: 0.88rem;
-  color: var(--muted);
+  color: var(--fg-muted);
 }
 
 .field {
   display: grid;
   gap: 0.15rem;
-  padding: 0.6rem 0;
+  padding: 0.65rem 0;
   border-bottom: 1px solid var(--border);
 }
 
@@ -551,41 +916,46 @@ textarea.text-input {
 }
 
 .field .label {
-  font-size: 0.78rem;
+  font-size: 0.74rem;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--muted);
+  letter-spacing: 0.06em;
+  color: var(--fg-muted);
+  font-weight: 600;
 }
 
 .field .value {
-  font-size: 0.92rem;
+  font-size: 0.93rem;
 }
 
 .callout {
-  padding: 0.85rem 1rem;
+  padding: 0.95rem 1.1rem;
   margin: 1rem 0;
-  border-radius: 6px;
+  border-radius: var(--radius);
   border: 1px solid var(--border);
   border-left-width: 3px;
   font-size: 0.93rem;
 }
 
 .callout.pass {
+  border-color: var(--pass-border);
   border-left-color: var(--pass);
   background: var(--pass-bg);
 }
 
 .callout.fail {
+  border-color: var(--fail-border);
   border-left-color: var(--fail);
   background: var(--fail-bg);
 }
 
 .callout.warn {
+  border-color: var(--warn-border);
   border-left-color: var(--warn);
   background: var(--warn-bg);
 }
 
 .callout.unknown {
+  border-color: var(--unknown-border);
   border-left-color: var(--unknown);
   background: var(--unknown-bg);
 }
@@ -594,6 +964,6 @@ textarea.text-input {
   margin-top: 3rem;
   padding-top: 1.5rem;
   border-top: 1px solid var(--border);
-  color: var(--muted);
+  color: var(--fg-muted);
   font-size: 0.88rem;
 }

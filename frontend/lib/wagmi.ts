@@ -44,7 +44,16 @@ export const coston2 = defineChain({
 
 export const wagmiConfig = createConfig({
   chains: [coston2],
+
+  // EIP-6963 discovery is what makes the chooser possible: every installed wallet announces itself
+  // and becomes its own connector, carrying its real name and icon. Stated explicitly rather than
+  // left to the default, because the wallet picker is useless without it.
+  multiInjectedProviderDiscovery: true,
+
+  // A generic fallback for wallets too old to announce themselves. When anything *has* announced,
+  // this entry is a duplicate under a vaguer name, so components/Wallet.tsx hides it.
   connectors: [injected()],
+
   transports: { [coston2.id]: http() },
   // The app is a single-page client application; nothing is rendered on a server that would need
   // the connection state hydrated from a cookie.

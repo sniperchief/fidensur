@@ -4,15 +4,43 @@
  * Its job is to explain the claim accurately and get a reader to a verification report. It states
  * the privacy limitation up front rather than burying it, because a reader who discovers that
  * limitation later will reasonably distrust everything else on the page.
+ *
+ * The visual treatment is allowed more confidence here than on the report itself — but no claim is
+ * dressed up beyond what the system actually does, and the one real caveat is given more space than
+ * anything else on the page rather than less.
  */
 
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 const CONTRACT = process.env.NEXT_PUBLIC_FIDENSUR_CONTRACT ?? "";
 const EXPLORER = "https://coston2-explorer.flare.network";
+
+const STEPS = [
+  {
+    n: "01",
+    title: "Compose privately",
+    body: "The organization builds an allocation policy in their browser and encrypts it to the enclave's public key. The plaintext is never transmitted anywhere.",
+  },
+  {
+    n: "02",
+    title: "Commit publicly",
+    body: "Only a hash of the ciphertext goes on-chain. It binds the organization to one exact policy without revealing a single line of it.",
+  },
+  {
+    n: "03",
+    title: "Compute in a TEE",
+    body: "A Trusted Execution Environment decrypts the policy, computes who gets what, and signs an aggregate — a Merkle root, a total, a count.",
+  },
+  {
+    n: "04",
+    title: "Prove to anyone",
+    body: "The chain verifies that signature came from an attested machine running published code. The distribution itself never appears.",
+  },
+];
 
 export default function LandingPage() {
   const router = useRouter();
@@ -23,20 +51,31 @@ export default function LandingPage() {
 
   return (
     <main className="landing">
-      <h1>Fidensur</h1>
-      <p className="tagline">Allocate funds privately. Prove the computation publicly.</p>
-
-      <p>
-        An organization commits to an encrypted allocation policy on-chain. A Trusted Execution
-        Environment decrypts it, computes who gets what, and signs an aggregate — a Merkle root, a
-        total, a recipient count. Individual addresses, amounts, and allocation rules never reach
-        the chain.
+      <h1>Allocate funds privately.</h1>
+      <p className="tagline">
+        Prove the computation publicly. Payroll, grants and bounties distributed without publishing
+        who got what — and still fully auditable by a stranger.
       </p>
 
-      <p>
-        Anyone can verify that a specific published program ran inside a real enclave and produced
-        that aggregate, without learning anything it was meant to hide.
-      </p>
+      <div className="hero-actions">
+        <Link className="btn btn-primary" href="/org">
+          Open the console
+        </Link>
+        <Link className="btn btn-ghost" href="/verify">
+          Browse rounds
+        </Link>
+      </div>
+
+      <h2>How it works</h2>
+      <ol className="steps-grid">
+        {STEPS.map((s) => (
+          <li key={s.n}>
+            <span className="step-num">{s.n}</span>
+            <h3>{s.title}</h3>
+            <p>{s.body}</p>
+          </li>
+        ))}
+      </ol>
 
       <h2>Verify a round</h2>
       <form
