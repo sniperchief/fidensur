@@ -145,8 +145,8 @@
    * next/font on the <html> element; if that class ever fails to apply, a bare `var(--font-sans)`
    * would be invalid at computed-value time and take the *whole* declaration down with it —
    * dropping the page to the browser default serif rather than to the stack listed after it. */
-  --sans: var(--font-sans, ui-sans-serif), ui-sans-serif, system-ui, -apple-system, "Segoe UI",
-    Roboto, "Helvetica Neue", Arial, sans-serif;
+  --sans: var(--font-sans, "Inter"), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
 
   --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
 }
