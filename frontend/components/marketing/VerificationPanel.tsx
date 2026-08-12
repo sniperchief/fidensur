@@ -1,98 +1,109 @@
 /**
  * The verification report, as an illustration.
  *
- * ## Why this file says "illustration" three times
+ * ## Why there is no VERIFIED badge on it
  *
- * Everything on this panel is a fixed string. It is a picture of what a report looks like when
- * every check passes — not a report, and not connected to anything.
+ * There used to be: a large green tick, seven rows all marked PASS. Every value was a fixed
+ * string, and a footnote said so.
  *
- * That distinction is the whole product. A marketing page that renders a green VERIFIED badge
- * with no computation behind it, on a site whose pitch is "don't trust the computation, verify
- * it", has already conceded the argument. So the panel is framed as a preview, its footer says
- * plainly what it is, and it links to the real thing — which derives every line from chain state
- * and the enclave's attestation report, and which will happily render a page full of "cannot be
- * checked from here" when the proxy is offline or the attestation is simulated.
+ * The problem was not the footnote, it was the arithmetic. `deriveVerdict` refuses to call this
+ * deployment verified — attestation here is simulated, so the attestation check genuinely fails —
+ * which meant a visitor read "✓ VERIFIED" on the homepage, clicked through to a real report, and
+ * got the opposite. A footnote loses to a green badge, and the contradiction reads as overselling,
+ * which is the one accusation this product cannot survive.
  *
- * Live data belongs on /verify/[round]. Nothing here should ever be wired to a chain read: the
- * moment it is, a visitor cannot tell which of the two they are looking at.
+ * So the illustration no longer asserts an outcome at all. Its job is to show **what a report
+ * contains** — the checks, their evidence, and the three different things a row can say — which is
+ * more informative than a verdict and cannot contradict the live page. The mixed states are the
+ * honest ones for this deployment, and they demonstrate the property actually worth selling: the
+ * report tells you when it cannot verify something.
+ *
+ * Nothing here is fetched. Live data belongs on /verify/[round]; the moment this is wired to a
+ * chain read, a visitor can no longer tell which of the two they are looking at.
  */
 
-import { IconCheckAnimated } from "@/components/ui/Icons";
+import { IconCheck, IconClose } from "@/components/ui/Icons";
 
-/** Illustrative values. Not read from anywhere, and deliberately not real hashes. */
-const ROWS: { label: string; value: string; mono?: boolean; ok?: boolean }[] = [
-  { label: "Extension", value: "Fidensur Allocation Engine" },
-  { label: "TEE", value: "Registered · GCP_AMD_SEV" },
-  { label: "Code hash", value: "0x8f2c41…6ba91d", mono: true },
-  { label: "Source", value: "github.com/…/fidensur", mono: true },
-  { label: "Attestation", value: "Signature recovered" },
-  { label: "Code match", value: "Published = deployed" },
-  { label: "Execution", value: "Genuine enclave" },
+/** Illustrative. Mirrors the six questions the real report asks, with this deployment's answers. */
+const ROWS: {
+  label: string;
+  value: string;
+  mono?: boolean;
+  state: "pass" | "fail" | "manual" | "info";
+  mark: string;
+}[] = [
+  { label: "Real enclave", value: "Simulated attestation", state: "fail", mark: "FAIL" },
+  { label: "Published code", value: "Rebuild to confirm", state: "manual", mark: "YOU" },
+  { label: "TEE signature", value: "Signer matches registry", state: "pass", mark: "PASS" },
+  { label: "Arithmetic", value: "Allocated ≤ funded", state: "pass", mark: "PASS" },
+  { label: "Committed policy", value: "0x8f2c41…6ba91d", mono: true, state: "info", mark: "—" },
+  { label: "Merkle root", value: "0x41d907…ac5b32", mono: true, state: "info", mark: "—" },
 ];
 
 export function VerificationPanel() {
   return (
-    <figure className="verify-panel" style={{ margin: 0 }}>
+    <figure className="verify-panel">
       <div className="verify-panel-head">
         <span className="window-dots" aria-hidden="true">
           <span />
           <span />
           <span />
         </span>
-        <span className="panel-title">Fidensur verification</span>
+        <span className="panel-title">Fidensur verification · round 1</span>
       </div>
 
       <div className="verify-panel-body">
-        <span className="verdict">
-          <span className="verdict-mark" aria-hidden="true">
-            <IconCheckAnimated size={13} />
-          </span>
-          VERIFIED
-        </span>
-        <p
-          style={{
-            margin: "var(--s3) 0 0",
-            fontSize: "var(--fs-sm)",
-            color: "var(--fg-muted)",
-          }}
-        >
-          This confidential computation matches its published identity.
-        </p>
+        {/* Left: the one check the page cannot make for you, shown as the comparison it is. */}
+        <div className="panel-pane panel-pane-left">
+          <span className="flow-label">Code identity</span>
 
-        <div className="verify-rows">
-          {ROWS.map((row) => (
-            <div className="verify-row" key={row.label}>
-              <span className="row-label">{row.label}</span>
-              <span className={row.mono ? "row-value mono" : "row-value"}>{row.value}</span>
-              <span className="row-mark" data-ok={row.ok ?? true}>
-                <IconCheckAnimated size={11} />
-                PASS
-              </span>
+          <div className="match-stack">
+            <div>
+              <span className="match-caption">Published source</span>
+              <code>0x8f2c41…6ba91d</code>
             </div>
-          ))}
+            <span className="match-eq" aria-hidden="true">
+              =
+            </span>
+            <div>
+              <span className="match-caption">Attested image</span>
+              <code>0x8f2c41…6ba91d</code>
+            </div>
+          </div>
+
+          <p className="pane-note">
+            The image builds bit-for-bit identically on independent machines. Rebuild the published
+            commit and the hash the enclave attests to is the hash you get.
+          </p>
         </div>
 
-        {/* Reproducible builds are the check the page cannot do for you, so it shows both sides
-            of the comparison rather than only the conclusion. */}
-        <div className="match-grid">
-          <div className="match-side">
-            <span className="flow-label">Published source</span>
-            <code>0x8f2c41…6ba91d</code>
-          </div>
-          <span className="match-eq" aria-hidden="true">
-            =
-          </span>
-          <div className="match-side">
-            <span className="flow-label">Attested image</span>
-            <code>0x8f2c41…6ba91d</code>
+        {/* Right: what each question answered. */}
+        <div className="panel-pane">
+          <div className="verify-rows">
+            {ROWS.map((row) => (
+              <div className="verify-row" key={row.label}>
+                <span className="row-label">{row.label}</span>
+                <span className={row.mono ? "row-value mono" : "row-value"}>{row.value}</span>
+                <span className="rail-mark" data-state={row.state}>
+                  {row.state === "pass" ? (
+                    <IconCheck size={11} />
+                  ) : row.state === "fail" ? (
+                    <IconClose size={11} />
+                  ) : null}
+                  {row.mark}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
       </div>
 
       <figcaption className="verify-panel-foot">
         <p>
-          Illustration of a passing report. A live report derives every line from chain state and
-          the enclave&rsquo;s attestation — and says so when a check cannot be made.
+          An illustration of a report&rsquo;s structure — not a live one. Attestation on this
+          testnet deployment really is simulated, and a real report marks it{" "}
+          <strong>FAIL</strong> rather than hiding it. <strong>YOU</strong> marks the one check no
+          page can make on your behalf.
         </p>
       </figcaption>
     </figure>

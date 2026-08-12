@@ -131,7 +131,10 @@
   --prose: 40rem;
 
   /* ---- type scale ---- */
-  --fs-display: clamp(2.5rem, 1.4rem + 4.3vw, 4.1rem);
+  /* The floor matters more than the ceiling. At 2.5rem the hero headline ran to six lines on a
+   * 390px screen and pushed the call to action off the first view; 2.125rem keeps it to four
+   * without reading as small. */
+  --fs-display: clamp(2.125rem, 1.2rem + 4.3vw, 4.1rem);
   --fs-h1: clamp(2rem, 1.3rem + 2.6vw, 2.9rem);
   --fs-h2: clamp(1.6rem, 1.2rem + 1.6vw, 2.2rem);
   --fs-h3: 1.0625rem;
@@ -1417,13 +1420,18 @@ pre code {
    verification panel (landing illustration)
    ========================================================================== */
 
+/* Full width, with the body split into two panes.
+ *
+ * A single column of label/value/mark rows stretched to 1100px is mostly gutter — the eye loses
+ * the row before it reaches the verdict. Two panes give the width something to do: the check that
+ * requires a rebuild on the left, where it can be shown as the comparison it actually is, and the
+ * per-question answers on the right. */
 .verify-panel {
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
   background: var(--surface);
   box-shadow: var(--shadow-md);
   overflow: hidden;
-  max-width: 34rem;
   width: 100%;
 }
 
@@ -1458,12 +1466,86 @@ pre code {
 }
 
 .verify-panel-body {
+  display: grid;
+  grid-template-columns: minmax(0, 19rem) minmax(0, 1fr);
+}
+
+.panel-pane {
   padding: var(--s5);
+  min-width: 0;
+}
+
+.panel-pane-left {
+  border-right: 1px solid var(--border);
+  background: var(--surface-inset);
+  display: flex;
+  flex-direction: column;
+}
+
+.pane-note {
+  margin: auto 0 0;
+  padding-top: var(--s4);
+  font-size: var(--fs-meta);
+  color: var(--fg-muted);
+  line-height: 1.55;
+}
+
+/* The two hashes stacked with the equals between them, so the comparison reads vertically in a
+ * narrow pane instead of being squeezed into three columns. */
+.match-stack {
+  display: grid;
+  gap: var(--s2);
+  margin-top: var(--s4);
+}
+
+.match-stack > div {
+  padding: var(--s3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+}
+
+.match-caption {
+  display: block;
+  font-size: var(--fs-label);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  color: var(--fg-subtle);
+  margin-bottom: 0.2rem;
+}
+
+.match-stack code {
+  font-size: 0.75rem;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--fg);
+}
+
+.match-stack .match-eq {
+  justify-self: center;
 }
 
 .verify-rows {
   display: grid;
-  margin: var(--s5) 0 0;
+  margin: 0;
+}
+
+.verify-rows .verify-row:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+@media (max-width: 900px) {
+  .verify-panel-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .panel-pane-left {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
 }
 
 .verify-row {
@@ -1532,6 +1614,22 @@ pre code {
   background: var(--surface-inset);
   font-size: var(--fs-meta);
   color: var(--fg-muted);
+}
+
+.verify-panel-foot strong {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: var(--fg);
+}
+
+/* A caption for the panel above it, centred to match the section heading. */
+.panel-caption {
+  max-width: 52ch;
+  margin: var(--s6) auto 0;
+  text-align: center;
+  font-size: var(--fs-sm);
+  color: var(--fg-muted);
+  line-height: 1.65;
 }
 
 .verify-panel-foot p {
@@ -2360,10 +2458,13 @@ pre code {
   overflow: hidden;
 }
 
+/* Wraps: the allocations table pairs a heading with three filter buttons, which will not sit on
+ * one line on a phone. */
 .table-head {
   display: flex;
   align-items: center;
-  gap: var(--s4);
+  flex-wrap: wrap;
+  gap: var(--s3) var(--s4);
   padding: var(--s4) var(--s5);
   border-bottom: 1px solid var(--border);
 }
@@ -2958,13 +3059,366 @@ textarea.text-input {
   border-bottom: none;
 }
 
+/* ==========================================================================
+   verification report — verdict, rail, layout
+   ========================================================================== */
+
+.report {
+  max-width: var(--shell);
+  margin: 0 auto;
+  padding: clamp(2rem, 4vw, 3rem) var(--s6) var(--s20);
+}
+
+/* Rail beside the report on desktop. The rail is the narrow track because the evidence is the
+ * point; a summary wider than what it summarises is a dashboard, not a report. */
+.report-layout {
+  display: grid;
+  grid-template-columns: 15rem minmax(0, 1fr);
+  gap: clamp(2rem, 4vw, 3.5rem);
+  align-items: start;
+  margin-top: var(--s10);
+}
+
+/* ---- explorer index header ---- */
+
+.index-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 20rem);
+  gap: var(--s8);
+  align-items: end;
+}
+
+.index-head h1 {
+  font-size: clamp(1.875rem, 1.4rem + 1.8vw, 2.5rem);
+  margin: 0;
+  letter-spacing: -0.03em;
+  max-width: 26ch;
+}
+
+.index-lede {
+  margin: var(--s4) 0 0;
+  font-size: 1.0625rem;
+  color: var(--fg-muted);
+  line-height: 1.6;
+  max-width: 44ch;
+}
+
+.index-lookup {
+  display: flex;
+  gap: var(--s2);
+}
+
+.index-lookup input {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: var(--fs-sm);
+}
+
+@media (max-width: 900px) {
+  .index-head {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--s6);
+  }
+}
+
+@media (max-width: 620px) {
+  .index-lookup {
+    flex-direction: column;
+  }
+
+  .index-lookup .btn {
+    width: 100%;
+  }
+}
+
+/* ---- verdict header ---- */
+
+.verdict-header {
+  position: relative;
+  overflow: hidden;
+  padding: clamp(1.5rem, 3vw, 2rem);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+}
+
+/* A hairline of outcome colour along the top edge rather than a tinted panel. The verdict is
+ * stated in words directly below; the colour is confirmation, never the message. */
+.verdict-header::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: var(--unknown);
+}
+
+.verdict-header[data-outcome="verified"]::before {
+  background: var(--pass);
+}
+
+.verdict-header[data-outcome="failed"]::before {
+  background: var(--fail);
+}
+
+.verdict-header[data-outcome="partial"]::before {
+  background: var(--warn);
+}
+
+.verdict-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s4);
+  flex-wrap: wrap;
+}
+
+.verdict-eyebrow {
+  font-family: var(--mono);
+  font-size: var(--fs-label);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fg-subtle);
+  margin: 0 0 var(--s2);
+}
+
+.verdict-header h1 {
+  font-size: clamp(1.75rem, 1.4rem + 1.4vw, 2.25rem);
+  margin: 0;
+  letter-spacing: -0.03em;
+}
+
+.verdict-body {
+  display: flex;
+  align-items: center;
+  gap: var(--s5);
+  margin-top: var(--s6);
+  padding-top: var(--s6);
+  border-top: 1px solid var(--border);
+}
+
+.verdict-mark-lg {
+  display: grid;
+  place-items: center;
+  width: 3.5rem;
+  height: 3.5rem;
+  flex: none;
+  border-radius: 50%;
+  border: 1px solid var(--unknown-border);
+  background: var(--unknown-bg);
+  color: var(--unknown);
+}
+
+.verdict-header[data-outcome="verified"] .verdict-mark-lg {
+  border-color: var(--pass-border);
+  background: var(--pass-bg);
+  color: var(--pass);
+}
+
+.verdict-header[data-outcome="failed"] .verdict-mark-lg {
+  border-color: var(--fail-border);
+  background: var(--fail-bg);
+  color: var(--fail);
+}
+
+.verdict-header[data-outcome="partial"] .verdict-mark-lg {
+  border-color: var(--warn-border);
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+
+.verdict-headline {
+  margin: 0;
+  font-size: 1.375rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.verdict-detail {
+  margin: var(--s2) 0 0;
+  font-size: var(--fs-sm);
+  color: var(--fg-muted);
+  line-height: 1.55;
+}
+
+.verdict-tally {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--s4);
+  margin: var(--s6) 0 0;
+  padding-top: var(--s5);
+  border-top: 1px solid var(--border);
+}
+
+.verdict-tally dt {
+  font-size: var(--fs-label);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  color: var(--fg-subtle);
+}
+
+.verdict-tally dd {
+  margin: 0.15rem 0 0;
+  font-size: 1.375rem;
+  font-weight: 620;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+/* ---- the rail ---- */
+
+.check-rail {
+  position: sticky;
+  top: var(--s6);
+}
+
+.rail-title {
+  font-size: var(--fs-label);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 600;
+  color: var(--fg-subtle);
+  margin: 0 0 var(--s3);
+}
+
+.check-rail ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 1px;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  background: var(--border);
+  overflow: hidden;
+}
+
+.check-rail a {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: 0.6rem 0.7rem;
+  background: var(--surface);
+  color: var(--fg-muted);
+  text-decoration: none;
+  font-size: var(--fs-meta);
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.check-rail a:hover {
+  background: var(--surface-inset);
+  color: var(--fg);
+}
+
+.check-rail a[aria-current="true"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.rail-n {
+  font-family: var(--mono);
+  font-size: 0.625rem;
+  color: var(--fg-subtle);
+  flex: none;
+}
+
+.rail-label {
+  margin-right: auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Word first, mark second. The report has to survive greyscale. */
+.rail-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  flex: none;
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 0.1rem 0.3rem;
+  border-radius: 3px;
+  border: 1px solid currentColor;
+  color: var(--fg-subtle);
+}
+
+.rail-mark[data-state="pass"] {
+  color: var(--pass);
+}
+
+.rail-mark[data-state="fail"] {
+  color: var(--fail);
+}
+
+.rail-mark[data-state="unavailable"] {
+  color: var(--warn);
+}
+
+.rail-mark[data-state="manual"] {
+  color: var(--accent);
+}
+
+.rail-mark[data-state="info"] {
+  border-color: transparent;
+}
+
+.rail-foot {
+  margin: var(--s4) 0 0;
+  font-size: 0.7rem;
+  line-height: 1.5;
+  color: var(--fg-subtle);
+}
+
+.rail-foot strong {
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  color: var(--fg-muted);
+}
+
+@media (max-width: 1080px) {
+  .report-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--s8);
+  }
+
+  /* Horizontal strip. Sticks under the header so it stays reachable while reading. */
+  .check-rail {
+    position: static;
+  }
+
+  .check-rail ol {
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(9rem, 1fr);
+    overflow-x: auto;
+    gap: 0;
+  }
+
+  .check-rail a {
+    border-right: 1px solid var(--border);
+  }
+
+  .rail-foot {
+    display: none;
+  }
+}
+
 /* ---------- verification report ---------- */
 
-.verify .summary {
+.verify .summary,
+.report .summary {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
   gap: var(--s5);
-  margin: 0 0 var(--s10);
+  margin: var(--s5) 0 0;
   padding: var(--s5);
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
@@ -2972,7 +3426,8 @@ textarea.text-input {
   box-shadow: var(--shadow-sm);
 }
 
-.verify .summary dt {
+.verify .summary dt,
+.report .summary dt {
   font-size: var(--fs-label);
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -2980,26 +3435,39 @@ textarea.text-input {
   font-weight: 600;
 }
 
-.verify .summary dd {
+.verify .summary dd,
+.report .summary dd {
   margin: var(--s1) 0 0;
   font-weight: 600;
   min-width: 0;
   overflow-wrap: anywhere;
 }
 
-.verify section {
+.verify section,
+.report-body section {
   margin: 0 0 var(--s10);
   padding-top: var(--s8);
   border-top: 1px solid var(--border);
 }
 
-.verify h2 {
+/* The first section sits directly under the rail on mobile and beside it on desktop; a rule above
+ * it would read as a divider from nothing. */
+.report-body section:first-child {
+  padding-top: 0;
+  border-top: none;
+}
+
+.verify h2,
+.report-body h2 {
   display: flex;
   gap: var(--s3);
   align-items: baseline;
+  font-size: 1.15rem;
+  margin: 0 0 var(--s3);
 }
 
-.verify h2 .num {
+.verify h2 .num,
+.report-body h2 .num {
   font-family: var(--mono);
   font-size: 0.8rem;
   color: var(--fg-muted);
@@ -3015,13 +3483,15 @@ textarea.text-input {
 
 /* Why the question matters. Deliberately prominent: a verification page that shows only verdicts
  * is asking to be trusted, which is the opposite of the point. */
-.verify .why {
+.verify .why,
+.report-body .why {
   color: var(--fg-muted);
   font-size: var(--fs-sm);
   margin: 0 0 var(--s5);
 }
 
 .verify .note,
+.report-body .note,
 .landing .note {
   color: var(--fg-muted);
   font-size: var(--fs-sm);
@@ -3150,7 +3620,8 @@ textarea.text-input {
   background: var(--unknown-bg);
 }
 
-.verify footer {
+.verify footer,
+.report-body footer {
   margin-top: var(--s12);
   padding-top: var(--s6);
   border-top: 1px solid var(--border);
@@ -4314,14 +4785,9 @@ textarea.text-input {
   .dialog-actions .btn {
     width: 100%;
   }
-}
 
-/* ---- small phones: 390 and below ---- */
-@media (max-width: 400px) {
-  .shell {
-    padding-inline: var(--s4);
-  }
-
+  /* Label, value and verdict do not fit on one line. The value takes its own row rather than
+   * being ellipsised down to nothing. */
   .verify-row {
     grid-template-columns: 1fr auto;
     row-gap: 0.15rem;
@@ -4331,9 +4797,81 @@ textarea.text-input {
     grid-column: 1 / -1;
   }
 
+  /* A datetime in a half-width column wraps to three lines. One per row instead. */
+  .round-panel .panel-facts {
+    grid-template-columns: 1fr;
+  }
+
+  /* Step actions stack, primary on top. `column-reverse` puts the last child first, and the
+   * primary button is always last so that `.spacer` can push it right on wider screens. */
+  .panel-actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .panel-actions .btn {
+    width: 100%;
+  }
+
+  .panel-actions .spacer {
+    margin-left: 0;
+  }
+
+  /* An input at `flex: 1 1 12rem` beside a button leaves neither usable at this width. */
+  .lookup input,
+  .lookup .btn,
+  .lookup button {
+    flex: 1 1 100%;
+  }
+
+  /* Stays three across on purpose — the counts only mean something next to each other, and
+   * stacking them turns a comparison into a list. Sized down instead. */
+  .verdict-tally {
+    gap: var(--s3);
+  }
+
+  .verdict-tally dt {
+    font-size: 0.6rem;
+    letter-spacing: 0.05em;
+  }
+
+  .verdict-tally dd {
+    font-size: 1.125rem;
+  }
+
+  .verdict-body {
+    gap: var(--s4);
+  }
+
+  .verdict-mark-lg {
+    width: 2.75rem;
+    height: 2.75rem;
+  }
+
+  .verdict-headline {
+    font-size: 1.1875rem;
+  }
+}
+
+/* ---- small phones: 390 and below ---- */
+@media (max-width: 400px) {
+  .shell {
+    padding-inline: var(--s4);
+  }
+
   .alloc-card-facts {
     grid-template-columns: 1fr;
     gap: var(--s3);
+  }
+
+  /* Six percent of a 390px screen is not a margin. */
+  .create-card,
+  .lookup-card,
+  .trust-lane,
+  .usecase,
+  .evidence-card,
+  .chain-state {
+    padding: var(--s5);
   }
 }
 

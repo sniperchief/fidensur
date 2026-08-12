@@ -1,101 +1,86 @@
 /**
  * Index of rounds.
  *
- * The per-round report at /verify/[round] was already complete but unreachable unless you happened
- * to know a round number. This is the way in.
+ * Deliberately read-only and wallet-free: auditing is something a stranger does, and requiring
+ * them to connect a wallet to look would be both unnecessary and a little sinister. It reads the
+ * chain over a public RPC and nothing else.
  *
- * Deliberately read-only and wallet-free: auditing is something a stranger does, and requiring them
- * to connect a wallet to look would be both unnecessary and a little sinister. It reads the chain
- * over a public RPC and nothing else.
+ * ## Why this shares the dashboard's plumbing
+ *
+ * This page used to carry its own copy of the round-fetching logic — the same `nextRoundId` read,
+ * the same bounded loop, the same cap, written twice. Two implementations of "list the rounds"
+ * drift, and the one nobody is looking at drifts first. It now uses `useRounds()` and the same
+ * table component as the workspace, so a round row looks and reads identically wherever it
+ * appears, and there is one place to fix if it is wrong.
  */
 
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { createPublicClient, http, type Address } from "viem";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 
-import {
-  COSTON2,
-  FIDENSUR_READ_ABI,
-  NATIVE_TOKEN,
-  formatAmount,
-  statusName,
-  type Round,
-} from "@/lib/contracts";
+import { AllocationTable } from "@/components/app/AllocationTable";
+import { IconInbox, IconSearch } from "@/components/ui/Icons";
+import { MetricCard } from "@/components/ui/MetricCard";
+import { COSTON2 } from "@/lib/contracts";
+import { formatCount, formatTokenAmount } from "@/lib/format";
+import { CONTRACT, summarizeRounds, useRounds } from "@/lib/rounds";
 
-const CONTRACT = process.env.NEXT_PUBLIC_FIDENSUR_CONTRACT as Address | undefined;
-
-const client = createPublicClient({ chain: COSTON2, transport: http() });
-
-/**
- * How many rounds to show.
- *
- * Reading each round is one RPC call, so an unbounded list would fire hundreds at a public endpoint
- * on page load. Newest first, because that is what anyone is looking for.
- */
 const LIMIT = 50;
 
-interface Listing {
-  id: bigint;
-  round: Round;
-}
-
 export default function VerifyIndexPage() {
-  const [rounds, setRounds] = useState<Listing[] | null>(null);
-  const [total, setTotal] = useState<bigint>(0n);
-  const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
+  const { listings, total, loading, error, configured, reload } = useRounds(LIMIT);
+  const [lookup, setLookup] = useState("");
 
-  useEffect(() => {
-    let cancelled = false;
-
-    (async () => {
-      try {
-        if (!CONTRACT) throw new Error("NEXT_PUBLIC_FIDENSUR_CONTRACT is not set");
-
-        const next = (await client.readContract({
-          address: CONTRACT,
-          abi: FIDENSUR_READ_ABI,
-          functionName: "nextRoundId",
-        })) as bigint;
-
-        if (cancelled) return;
-        setTotal(next);
-
-        // Newest first, capped. Round ids are dense from 0, so no log scan is needed — and reading
-        // state is more reliable than getLogs, which public RPCs commonly restrict by block range.
-        const ids: bigint[] = [];
-        for (let id = next - 1n; id >= 0n && ids.length < LIMIT; id -= 1n) ids.push(id);
-
-        const listings = await Promise.all(
-          ids.map(async (id) => ({
-            id,
-            round: (await client.readContract({
-              address: CONTRACT,
-              abi: FIDENSUR_READ_ABI,
-              functionName: "getRound",
-              args: [id],
-            })) as Round,
-          })),
-        );
-
-        if (!cancelled) setRounds(listings);
-      } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const trimmed = lookup.trim();
+  const valid = /^\d+$/.test(trimmed);
+  const summary = listings ? summarizeRounds(listings) : null;
 
   return (
-    <main className="console">
-      <h1>Verify a round</h1>
-      <p className="tagline">
-        Every round publishes a Merkle root, a total and a count. None publishes who got what.
-      </p>
+    <main className="report">
+      <div className="index-head">
+        <div>
+          <p className="verdict-eyebrow">Verification explorer</p>
+          <h1>Every round, and the evidence behind it</h1>
+          <p className="index-lede">
+            Each round publishes a Merkle root, a total and a recipient count. None publishes who
+            got what. Open one to check the enclave&rsquo;s signature yourself — no wallet needed.
+          </p>
+        </div>
+
+        <form
+          className="index-lookup"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (valid) router.push(`/verify/${trimmed}`);
+          }}
+        >
+          <label className="visually-hidden" htmlFor="round-lookup">
+            Round number
+          </label>
+          <input
+            id="round-lookup"
+            className="text-input"
+            inputMode="numeric"
+            value={lookup}
+            onChange={(e) => setLookup(e.target.value)}
+            placeholder="Go to round…"
+            autoComplete="off"
+          />
+          <button className="btn btn-primary" type="submit" disabled={!valid}>
+            <IconSearch size={15} />
+            Open
+          </button>
+        </form>
+      </div>
+
+      {!configured && (
+        <div className="callout fail">
+          <strong>NEXT_PUBLIC_FIDENSUR_CONTRACT is not set.</strong> There is no contract to read.
+        </div>
+      )}
 
       {error && (
         <div className="callout fail">
@@ -103,59 +88,78 @@ export default function VerifyIndexPage() {
           <pre>
             <code>{error}</code>
           </pre>
+          <button className="btn btn-ghost btn-sm" onClick={reload}>
+            Try again
+          </button>
         </div>
       )}
 
-      {!error && rounds === null && <p className="hint">Reading rounds…</p>}
+      <div className="metric-grid" style={{ marginTop: "var(--s8)" }}>
+        <MetricCard
+          label="Rounds created"
+          loading={loading}
+          value={formatCount(total)}
+          foot="Numbered from 0, in the order they were created"
+        />
+        <MetricCard
+          label="Finalized"
+          loading={loading}
+          value={summary ? formatCount(summary.finalizedCount) : "—"}
+          foot="A signed enclave result was verified on-chain"
+        />
+        <MetricCard
+          label="Allocated in total"
+          loading={loading}
+          value={summary ? formatTokenAmount(summary.totalFunded) : "—"}
+          unit="C2FLR"
+          foot="Sum of every round's funded balance"
+        />
+        <MetricCard
+          label="Recipients"
+          loading={loading}
+          value={summary ? formatCount(summary.recipientsAllocated) : "—"}
+          foot="Across finalized rounds — counts only, never identities"
+        />
+      </div>
 
-      {rounds !== null && rounds.length === 0 && (
-        <div className="callout unknown">
-          No rounds have been created on this deployment yet. The{" "}
-          <Link href="/org">organization console</Link> creates the first one.
+      <section className="table-card" style={{ marginTop: "var(--s6)" }}>
+        <div className="table-head">
+          <h2>Rounds</h2>
+          {total > BigInt(LIMIT) && (
+            <span className="hint" style={{ margin: 0 }}>
+              Showing the most recent {LIMIT}
+            </span>
+          )}
         </div>
-      )}
 
-      {rounds !== null && rounds.length > 0 && (
-        <>
-          <p className="hint">
-            {String(total)} round{total === 1n ? "" : "s"} created
-            {total > BigInt(LIMIT) ? `, showing the most recent ${LIMIT}` : ""}.
+        {loading && (
+          <p className="hint" style={{ padding: "var(--s6)" }}>
+            Reading rounds from {COSTON2.name}…
           </p>
+        )}
 
-          <table className="rounds">
-            <thead>
-              <tr>
-                <th>Round</th>
-                <th>Status</th>
-                <th>Funded</th>
-                <th>Allocated</th>
-                <th>Recipients</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {rounds.map(({ id, round }) => (
-                <tr key={String(id)}>
-                  <td>{String(id)}</td>
-                  <td>{statusName(round.status)}</td>
-                  <td>
-                    {formatAmount(round.funded)}{" "}
-                    {round.token === NATIVE_TOKEN ? "C2FLR" : "tokens"}
-                  </td>
-                  <td>{round.totalAllocated > 0n ? formatAmount(round.totalAllocated) : "—"}</td>
-                  <td>{round.recipientCount || "—"}</td>
-                  <td>
-                    <Link href={`/verify/${id}`}>Report →</Link>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </>
-      )}
+        {!loading && listings && listings.length > 0 && <AllocationTable listings={listings} />}
 
-      <p className="hint" style={{ marginTop: "2rem" }}>
-        Contract <code>{CONTRACT ?? "(unset)"}</code> on Coston2.
+        {!loading && listings && listings.length === 0 && (
+          <div className="empty-state">
+            <span className="empty-mark" aria-hidden="true">
+              <IconInbox size={20} />
+            </span>
+            <h3>No rounds yet</h3>
+            <p>
+              This deployment has not created any allocation rounds. There is nothing to verify
+              until one exists.
+            </p>
+            <Link className="btn btn-secondary" href="/org">
+              Open the console
+            </Link>
+          </div>
+        )}
+      </section>
+
+      <p className="hint" style={{ marginTop: "var(--s6)" }}>
+        Reading contract <code>{CONTRACT ?? "(unset)"}</code> on {COSTON2.name} over a public RPC.
+        Nothing on this page passes through a Fidensur server.
       </p>
     </main>
   );

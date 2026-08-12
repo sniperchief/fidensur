@@ -195,21 +195,25 @@ export default function LandingPage() {
       {/* ================= verification ================= */}
       <section className="section section-subtle" id="verification">
         <GridBackground fade="edges" strong />
-        <div className="shell tee-layout">
+        <div className="shell">
           <Reveal>
             <SectionHeading
               eyebrow="Verification"
               title="Don't trust the computation. Check it."
               lede="A private backend that asks to be trusted hasn't solved the problem, it has moved it. Every round publishes enough for a stranger to check the work: which program ran, that it ran in real hardware, and that the signature came from that hardware."
+              center
             />
-            <p className="note">
-              The report re-derives every check in your browser, independently of the contract. Two
-              implementations agreeing is evidence; one checking itself is not.
-            </p>
           </Reveal>
 
           <Reveal delay={80}>
             <VerificationPanel />
+          </Reveal>
+
+          <Reveal>
+            <p className="panel-caption">
+              The report re-derives every check in your browser, independently of the contract. Two
+              implementations agreeing is evidence; one checking itself is not.
+            </p>
           </Reveal>
         </div>
 
