@@ -45,7 +45,8 @@ export function Dialog({
   title: string;
   children?: ReactNode;
   onClose: () => void;
-  primary?: { label: string; onClick?: () => void };
+  /** `danger` styles the button as destructive — for actions that cannot be undone. */
+  primary?: { label: string; onClick?: () => void; danger?: boolean; disabled?: boolean };
   secondary?: { label: string; onClick?: () => void };
   /** Set false for a dialog that must be acknowledged with a button. */
   dismissible?: boolean;
@@ -148,7 +149,11 @@ export function Dialog({
               </button>
             )}
             {primary && (
-              <button className="btn btn-primary" onClick={primary.onClick ?? onClose}>
+              <button
+                className={primary.danger ? "btn btn-danger" : "btn btn-primary"}
+                onClick={primary.onClick ?? onClose}
+                disabled={primary.disabled}
+              >
                 {primary.label}
               </button>
             )}

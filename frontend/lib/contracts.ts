@@ -341,6 +341,19 @@ export const FIDENSUR_WRITE_ABI = [
     ],
     outputs: [],
   },
+  {
+    // The way out of a round that can no longer proceed — most often because the ciphertext was
+    // lost, and a commitment can never be satisfied twice. Refunds the organization in full.
+    //
+    // Restricted to Open and Committed on-chain. From Computing a signed result may already
+    // exist, and cancelling there would let an organization race the relay to void an allocation
+    // it had already committed to.
+    type: "function",
+    name: "cancelRound",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "_roundId", type: "uint256" }],
+    outputs: [],
+  },
 ] as const;
 
 /** Events the explorer replays to build a round's timeline. */

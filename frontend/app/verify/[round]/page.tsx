@@ -62,8 +62,21 @@ const PROXY_URL = process.env.NEXT_PUBLIC_EXT_PROXY_URL;
 
 const client = createPublicClient({ chain: COSTON2, transport: http() });
 
+/**
+ * How many recipients a report will probe individually.
+ *
+ * `totalClaimed` gives the amount claimed, not the number of claimants, so the count needs one
+ * `isClaimed` read per index. That is fine for the round sizes this is useful on and unacceptable
+ * for the 4096 the contract permits, so above the cap the report simply omits the count rather
+ * than firing hundreds of requests at a public RPC. Event logs would be one call, but public
+ * endpoints commonly restrict block ranges — a count that silently truncates is worse than none.
+ */
+const CLAIM_SCAN_LIMIT = 128;
+
 interface PageState {
   round?: Round;
+  /** Undefined when the round is too large to scan, or the scan failed. */
+  claimedCount?: number;
   teeAddress?: Address;
   extensionId?: bigint;
   attestation?: AttestationReport | null;
@@ -135,6 +148,29 @@ export default function VerifyRoundPage({ params }: { params: Promise<{ round: s
           }
         }
 
+        // How many recipients have actually claimed. Best-effort and bounded — see
+        // CLAIM_SCAN_LIMIT. A failure here must not take the rest of the report down with it.
+        let claimedCount: number | undefined;
+        if (roundData.recipientCount > 0 && roundData.recipientCount <= CLAIM_SCAN_LIMIT) {
+          try {
+            const flags = await Promise.all(
+              Array.from(
+                { length: roundData.recipientCount },
+                (_, i) =>
+                  client.readContract({
+                    address: CONTRACT,
+                    abi: FIDENSUR_READ_ABI,
+                    functionName: "isClaimed",
+                    args: [roundId, BigInt(i)],
+                  }) as Promise<boolean>,
+              ),
+            );
+            claimedCount = flags.filter(Boolean).length;
+          } catch {
+            claimedCount = undefined;
+          }
+        }
+
         // The signed result is what the signature check runs against. It is only obtainable while
         // the proxy still holds it; an older round may legitimately have none available.
         let result: ActionResult | null = null;
@@ -151,7 +187,17 @@ export default function VerifyRoundPage({ params }: { params: Promise<{ round: s
         }
 
         if (!cancelled) {
-          setState({ round: roundData, teeAddress, extensionId, attestation, verdict, result, steps, loading: false });
+          setState({
+            round: roundData,
+            claimedCount,
+            teeAddress,
+            extensionId,
+            attestation,
+            verdict,
+            result,
+            steps,
+            loading: false,
+          });
         }
       } catch (e) {
         if (!cancelled) {
@@ -208,7 +254,7 @@ export default function VerifyRoundPage({ params }: { params: Promise<{ round: s
     );
   }
 
-  const { round, teeAddress, attestation, verdict, result, steps } = state;
+  const { round, claimedCount, teeAddress, attestation, verdict, result, steps } = state;
   if (!round) {
     return (
       <Shell>
@@ -403,6 +449,24 @@ docker build --build-arg SOURCE_DATE_EPOCH=$(git log -1 --format=%ct) \\
               {formatTokenAmount(round.totalAllocated - round.totalClaimed)} {symbol}
               {finalized && <em> — returns to the organization after the claim window closes.</em>}
             </Field>
+
+            {claimedCount !== undefined && round.recipientCount > 0 && (
+              <>
+                <Field label="Recipients claimed">
+                  {claimedCount} of {round.recipientCount}
+                  {claimedCount < round.recipientCount && (
+                    <em>
+                      {" "}
+                      — {round.recipientCount - claimedCount} still to claim
+                    </em>
+                  )}
+                </Field>
+                <RemainderPrivacy
+                  remaining={round.recipientCount - claimedCount}
+                  unclaimed={`${formatTokenAmount(round.totalAllocated - round.totalClaimed)} ${symbol}`}
+                />
+              </>
+            )}
           </Section>
 
           {/* 5 — was the committed policy the one evaluated? */}
@@ -505,6 +569,48 @@ function Check({ ok, label, children }: { ok: boolean; label: string; children?:
       <span className="label">{label}</span>
       {children && <div className="value">{children}</div>}
     </div>
+  );
+}
+
+/**
+ * How much privacy the unclaimed recipients still have.
+ *
+ * Publishing a total alongside individual claims means the remainder decays by subtraction. With
+ * every recipient but one having claimed, the last allocation is not merely guessable — it is
+ * exactly known, and it became known through other people's actions rather than its owner's.
+ *
+ * That is inherent to the design: the total is what makes the round auditable at all, so it
+ * cannot simply be withheld. What *can* be done is say so, on the page, before someone works it
+ * out for themselves and concludes the product was hiding it.
+ */
+function RemainderPrivacy({ remaining, unclaimed }: { remaining: number; unclaimed: string }) {
+  if (remaining === 0) {
+    return (
+      <p className="note">
+        Every recipient has claimed, so every amount in this round is now public — each published
+        by its own recipient, when they chose to spend it.
+      </p>
+    );
+  }
+
+  if (remaining === 1) {
+    return (
+      <div className="callout warn">
+        <strong>One recipient has not claimed, and their amount is already derivable.</strong>{" "}
+        Subtracting the claims so far from the published total leaves exactly {unclaimed} — theirs.
+        Claiming would reveal nothing further about them. This is a consequence of publishing a
+        total, which is also what makes the round auditable; it is stated here rather than left to
+        be noticed.
+      </div>
+    );
+  }
+
+  return (
+    <p className="note">
+      The {remaining} unclaimed allocations sum to {unclaimed}, but are not individually
+      derivable. That protection weakens as claims come in, and disappears entirely for whoever
+      claims last.
+    </p>
   );
 }
 

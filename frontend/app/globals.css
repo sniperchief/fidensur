@@ -561,6 +561,32 @@ pre code {
   color: var(--warn-on);
 }
 
+/* Destructive. Deliberately not the default anywhere — it only appears inside a confirmation,
+ * after the consequence has been spelled out. */
+.btn-danger {
+  background: var(--fail);
+  color: #fff;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--fail) 85%, #000);
+  color: #fff;
+}
+
+/* A quiet way out, sitting apart from the flow's forward actions. */
+.btn-danger-quiet {
+  background: transparent;
+  color: var(--fail);
+  border-color: var(--fail-border);
+  box-shadow: none;
+}
+
+.btn-danger-quiet:hover:not(:disabled) {
+  background: var(--fail-bg);
+  color: var(--fail);
+  border-color: var(--fail);
+}
+
 .btn-sm {
   font-size: var(--fs-meta);
   min-height: 2rem;

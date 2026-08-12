@@ -125,6 +125,7 @@ function Console({ contract }: { contract: Address }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [failure, setFailure] = useState<FriendlyError | null>(null);
   const [success, setSuccess] = useState<{ title: string; body: React.ReactNode } | null>(null);
+  const [cancelling, setCancelling] = useState(false);
 
   // Where the user is looking. Clamped to the round's real progress after every read, so a
   // completed action always carries the view forward.
@@ -250,10 +251,15 @@ function Console({ contract }: { contract: Address }) {
         />
       ) : (
         <>
-          <RoundHeader roundId={roundId} round={round} onClose={() => {
-            setRoundId(null);
-            setRound(null);
-          }} />
+          <RoundHeader
+            roundId={roundId}
+            round={round}
+            onClose={() => {
+              setRoundId(null);
+              setRound(null);
+            }}
+            onCancel={() => setCancelling(true)}
+          />
 
           <Stepper current={viewing} furthest={reached} onSelect={(s) => setViewing(s as Step)} />
 
@@ -278,6 +284,51 @@ function Console({ contract }: { contract: Address }) {
           </div>
         </>
       )}
+
+      {/* Destructive and irreversible, so the consequence is spelled out before the button that
+          does it — including the exact amount coming back and where it goes. */}
+      <Dialog
+        open={cancelling}
+        tone="info"
+        title="Cancel this round?"
+        onClose={() => setCancelling(false)}
+        secondary={{ label: "Keep the round" }}
+        primary={{
+          label: busy === "cancel" ? "Cancelling…" : "Cancel & refund",
+          danger: true,
+          disabled: busy !== null,
+          onClick: () =>
+            void run("cancel", async () => {
+              if (roundId === null) return;
+              await send("cancelRound", [roundId]);
+              setCancelling(false);
+              setSuccess({
+                title: "Round cancelled",
+                body: (
+                  <p>
+                    <span className="dialog-amount">
+                      {round ? formatTokenAmount(round.funded) : ""}
+                      <span className="unit">C2FLR</span>
+                    </span>
+                    has been returned to your wallet. This round is closed for good — start a new
+                    one when you&rsquo;re ready.
+                  </p>
+                ),
+              });
+            }),
+        }}
+      >
+        <p>
+          The full balance of{" "}
+          <strong>{round ? formatTokenAmount(round.funded) : "0"} C2FLR</strong> goes back to your
+          wallet, and round {roundId !== null ? String(roundId) : ""} is permanently closed.
+        </p>
+        <p className="dialog-hint">
+          This is the way out of a round whose ciphertext was lost — a commitment can never be
+          satisfied twice, so the round itself cannot be rescued, but the money can. It cannot be
+          undone.
+        </p>
+      </Dialog>
 
       <ErrorDialog error={failure} onClose={() => setFailure(null)} />
 
@@ -433,11 +484,19 @@ function RoundHeader({
   roundId,
   round,
   onClose,
+  onCancel,
 }: {
   roundId: bigint;
   round: Round;
   onClose: () => void;
+  onCancel: () => void;
 }) {
+  // Mirrors `cancelRound`'s own guard. Not a duplicated rule so much as the same rule shown: the
+  // contract refuses from Computing onward, because a signed result may already exist and
+  // cancelling there would let an organization race the relay to void an allocation it had
+  // already committed to.
+  const cancellable = round.status === OPEN || round.status === COMMITTED;
+
   return (
     <div className="page-head" style={{ marginBottom: "var(--s6)" }}>
       <div>
@@ -449,9 +508,17 @@ function RoundHeader({
           </span>
         </p>
       </div>
-      <button className="btn btn-ghost btn-sm" onClick={onClose}>
-        Switch round
-      </button>
+
+      <div className="btn-group">
+        {cancellable && round.funded > 0n && (
+          <button className="btn btn-danger-quiet btn-sm" onClick={onCancel}>
+            Cancel &amp; refund
+          </button>
+        )}
+        <button className="btn btn-ghost btn-sm" onClick={onClose}>
+          Switch round
+        </button>
+      </div>
     </div>
   );
 }
@@ -947,7 +1014,9 @@ function ComputePanel({
         {!ciphertext ? (
           <div className="callout warn">
             <strong>This browser does not have the ciphertext for round {String(roundId)}.</strong>{" "}
-            Upload the file you downloaded when you committed.
+            Upload the file you downloaded when you committed. If it is gone for good, the round
+            cannot proceed — but <strong>Cancel &amp; refund</strong> above returns every token to
+            you, and you can start again.
             <div style={{ marginTop: "var(--s3)" }}>
               <input
                 type="file"

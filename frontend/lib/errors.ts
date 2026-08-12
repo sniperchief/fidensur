@@ -112,7 +112,8 @@ const CONTRACT_ERRORS: Record<
       "rejected it.",
     hint:
       "Upload the exact file you downloaded when you committed. Re-encrypting the same policy " +
-      "produces different bytes, so it cannot be recreated — only that file will work.",
+      "produces different bytes, so it cannot be recreated — only that file will work. If it is " +
+      "lost, use Cancel & refund to take the funds back and start a new round.",
   }),
 
   EmptyCiphertext: () => ({
