@@ -23,7 +23,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { useAccount, useChainId, useConnect, useDisconnect, useSwitchChain } from "wagmi";
+import { useAccount, useConnect, useDisconnect, useSwitchChain } from "wagmi";
 import type { Connector } from "wagmi";
 
 import { coston2 } from "@/lib/wagmi";
@@ -50,9 +50,18 @@ function useWalletChoices(): Connector[] {
 }
 
 export function ConnectButton() {
-  const { address, isConnected } = useAccount();
+  // `useAccount().chainId`, not `useChainId()`.
+  //
+  // `useChainId()` reads `config.state.chainId`, which wagmi constrains to the chains passed to
+  // `createConfig` — and this app configures exactly one. So it returns 114 unconditionally,
+  // including when the wallet is sitting on Ethereum mainnet, and the wrong-network branch below
+  // becomes unreachable. The user is then let through to a console where every write throws
+  // "wallet not ready", because `useWalletClient()` has no transport for the chain the wallet is
+  // actually on.
+  //
+  // `useAccount().chainId` reports the connector's real chain, which is the question being asked.
+  const { address, isConnected, chainId } = useAccount();
   const { disconnect } = useDisconnect();
-  const chainId = useChainId();
   const { switchChain, isPending: switching } = useSwitchChain();
   const [picking, setPicking] = useState(false);
 
@@ -199,8 +208,9 @@ function WalletPicker({ onClose }: { onClose: () => void }) {
 
 /** Renders children only once a wallet is connected to the right chain. */
 export function RequireWallet({ children }: { children: React.ReactNode }) {
-  const { isConnected } = useAccount();
-  const chainId = useChainId();
+  // The connector's actual chain — see the note in ConnectButton for why `useChainId()` is the
+  // wrong source here and silently lets a wrong-network wallet through this gate.
+  const { isConnected, chainId } = useAccount();
 
   if (!isConnected) {
     return (

@@ -29,6 +29,7 @@ import { usePublicClient, useWalletClient, useAccount } from "wagmi";
 import { PolicyBuilder, type PolicyDraftResult } from "@/components/PolicyBuilder";
 import { RequireWallet } from "@/components/Wallet";
 import {
+  COSTON2,
   FIDENSUR_READ_ABI,
   FIDENSUR_WRITE_ABI,
   NATIVE_TOKEN,
@@ -78,8 +79,8 @@ export default function OrgConsolePage() {
 
 function Console({ contract }: { contract: Address }) {
   const publicClient = usePublicClient();
-  const { data: walletClient } = useWalletClient();
-  const { address } = useAccount();
+  const { data: walletClient, isLoading: walletLoading, error: walletError } = useWalletClient();
+  const { address, chainId } = useAccount();
 
   const [roundId, setRoundId] = useState<bigint | null>(null);
   const [round, setRound] = useState<Round | null>(null);
@@ -132,7 +133,23 @@ function Console({ contract }: { contract: Address }) {
 
   const send = useCallback(
     async (functionName: string, args: unknown[], value = 0n): Promise<Hex> => {
-      if (!publicClient || !walletClient) throw new Error("wallet not ready");
+      // "wallet not ready" on its own is unactionable — it names a symptom and no cause, and
+      // there are three quite different ones. Say which.
+      if (!publicClient) {
+        throw new Error(
+          `No RPC client for chain ${chainId ?? "unknown"}. Fidensur is configured only for ` +
+            `${COSTON2.name} (chain ${COSTON2.id}). Switch networks in your wallet.`,
+        );
+      }
+      if (!walletClient) {
+        if (walletLoading) throw new Error("The wallet is still connecting. Try again in a moment.");
+        if (walletError) throw new Error(`The wallet refused to provide a signer: ${walletError.message}`);
+        throw new Error(
+          `No signer available. The wallet reports chain ${chainId ?? "unknown"}; Fidensur ` +
+            `expects ${COSTON2.id}. If your wallet is already on ${COSTON2.name}, reload the ` +
+            `page — a network switched after connecting is not always propagated.`,
+        );
+      }
       const { request } = await publicClient.simulateContract({
         address: contract,
         abi: FIDENSUR_WRITE_ABI,
@@ -147,7 +164,7 @@ function Console({ contract }: { contract: Address }) {
       if (receipt.status !== "success") throw new Error(`${functionName} reverted`);
       return hash;
     },
-    [publicClient, walletClient, contract, note],
+    [publicClient, walletClient, walletLoading, walletError, chainId, contract, note],
   );
 
   const isOrganization =
