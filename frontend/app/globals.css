@@ -3571,6 +3571,461 @@ textarea.text-input {
 }
 
 /* ==========================================================================
+   stepper
+   --------------------------------------------------------------------------
+   A readout of where the round is, not a wizard's internal state. Five equal tracks so the rail
+   reads as a fixed-length journey rather than something that grows as you go.
+   ========================================================================== */
+
+.stepper {
+  list-style: none;
+  margin: 0 0 var(--s6);
+  padding: 0;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.stepper-button {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  width: 100%;
+  min-height: 3.5rem;
+  padding: var(--s3) var(--s4);
+  font: inherit;
+  font-size: var(--fs-meta);
+  font-weight: 500;
+  text-align: left;
+  color: var(--fg-subtle);
+  background: none;
+  border: 0;
+  border-right: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.stepper-step:last-child .stepper-button {
+  border-right: none;
+}
+
+.stepper-button:disabled {
+  cursor: default;
+}
+
+.stepper-button:not(:disabled):hover {
+  background: var(--surface-inset);
+  color: var(--fg);
+}
+
+.stepper-mark {
+  display: grid;
+  place-items: center;
+  width: 1.625rem;
+  height: 1.625rem;
+  flex: none;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  background: var(--bg);
+  font-family: var(--mono);
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--fg-subtle);
+}
+
+.stepper-step[data-state="done"] .stepper-mark {
+  border-color: var(--pass-border);
+  background: var(--pass-bg);
+  color: var(--pass);
+}
+
+.stepper-step[data-state="done"] .stepper-button {
+  color: var(--fg-muted);
+}
+
+.stepper-step[data-state="active"] .stepper-button {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.stepper-step[data-state="active"] .stepper-mark {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-on);
+}
+
+.stepper-label-short {
+  display: none;
+}
+
+/* ==========================================================================
+   wizard panels
+   --------------------------------------------------------------------------
+   One step visible at a time, sliding in from the direction of travel. Only the incoming panel
+   animates — cross-fading two panels of different heights makes the page jump, which is exactly
+   the sensation the sliding is meant to remove.
+   ========================================================================== */
+
+.wizard {
+  position: relative;
+}
+
+.wizard-panel {
+  animation: panel-in 0.3s var(--ease) both;
+}
+
+.wizard-panel[data-direction="back"] {
+  animation-name: panel-in-back;
+}
+
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+}
+
+@keyframes panel-in-back {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+}
+
+.panel-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  flex-wrap: wrap;
+  margin-top: var(--s6);
+  padding-top: var(--s5);
+  border-top: 1px solid var(--border);
+}
+
+.panel-actions .spacer {
+  margin-left: auto;
+}
+
+/* A completed step, viewed after the fact. Read-only by construction: there is nothing to edit
+ * once it is on-chain. */
+.panel-done {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s3);
+  padding: var(--s4);
+  border: 1px solid var(--pass-border);
+  border-radius: var(--r);
+  background: var(--pass-bg);
+  font-size: var(--fs-sm);
+}
+
+.panel-done .done-mark {
+  display: grid;
+  place-items: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  flex: none;
+  border-radius: 50%;
+  border: 1px solid var(--pass);
+  color: var(--pass);
+  margin-top: 1px;
+}
+
+/* ==========================================================================
+   round creation card
+   ========================================================================== */
+
+.create-card {
+  position: relative;
+  overflow: hidden;
+  padding: clamp(1.5rem, 3vw, 2.25rem);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+}
+
+/* The same technical grid as the marketing site, at low strength — it ties the console to the
+ * product rather than letting it look like a different application. */
+.create-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+  background-size: 40px 40px;
+  -webkit-mask-image: linear-gradient(to bottom right, #000, transparent 55%);
+  mask-image: linear-gradient(to bottom right, #000, transparent 55%);
+}
+
+.create-card > * {
+  position: relative;
+}
+
+.create-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s4);
+  margin-bottom: var(--s8);
+}
+
+.create-icon {
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  flex: none;
+  border-radius: var(--r);
+  border: 1px solid var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.create-head h2 {
+  font-size: 1.15rem;
+  margin: 0 0 0.2rem;
+}
+
+.create-head p {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--fg-muted);
+  max-width: 40rem;
+}
+
+.field-label {
+  display: block;
+  font-size: var(--fs-label);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  color: var(--fg-subtle);
+  margin-bottom: var(--s2);
+}
+
+/* Segmented control. Common windows as one tap, with an escape hatch for anything else — a bare
+ * number field makes the common case as much work as the rare one. */
+.segmented {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  background: var(--surface-2);
+}
+
+.segmented button {
+  font: inherit;
+  font-size: var(--fs-meta);
+  font-weight: 500;
+  min-height: 2.25rem;
+  padding: 0 0.85rem;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--fg-muted);
+  cursor: pointer;
+  transition: background 0.15s var(--ease), color 0.15s var(--ease),
+    box-shadow 0.15s var(--ease);
+}
+
+.segmented button:hover {
+  color: var(--fg);
+}
+
+.segmented button[aria-pressed="true"] {
+  background: var(--surface);
+  color: var(--accent);
+  font-weight: 600;
+  border-color: var(--border);
+  box-shadow: var(--shadow-sm);
+}
+
+.create-divider {
+  display: flex;
+  align-items: center;
+  gap: var(--s4);
+  margin: var(--s8) 0 var(--s6);
+  color: var(--fg-subtle);
+  font-size: var(--fs-meta);
+}
+
+.create-divider::before,
+.create-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* ==========================================================================
+   dialog
+   ========================================================================== */
+
+.dialog {
+  position: relative;
+  width: 100%;
+  max-width: 26rem;
+  padding: var(--s8) var(--s6) var(--s6);
+  text-align: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-lg);
+  animation: dialog-in 0.22s var(--ease);
+}
+
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+}
+
+.dialog-dismiss {
+  position: absolute;
+  top: var(--s3);
+  right: var(--s3);
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--fg-subtle);
+  cursor: pointer;
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.dialog-dismiss:hover {
+  background: var(--surface-2);
+  color: var(--fg);
+}
+
+.dialog-mark {
+  display: grid;
+  place-items: center;
+  width: 3.25rem;
+  height: 3.25rem;
+  margin: 0 auto var(--s5);
+  border-radius: 50%;
+  border: 1px solid var(--unknown-border);
+  background: var(--unknown-bg);
+  color: var(--unknown);
+}
+
+.dialog[data-tone="success"] .dialog-mark {
+  border-color: var(--pass-border);
+  background: var(--pass-bg);
+  color: var(--pass);
+  animation: mark-pop 0.4s var(--ease) both;
+}
+
+.dialog[data-tone="error"] .dialog-mark {
+  border-color: var(--fail-border);
+  background: var(--fail-bg);
+  color: var(--fail);
+}
+
+@keyframes mark-pop {
+  from {
+    transform: scale(0.7);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.04);
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.dialog h2 {
+  font-size: 1.1875rem;
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+
+.dialog-body {
+  margin-top: var(--s3);
+}
+
+.dialog-body p {
+  margin: 0 0 var(--s3);
+  font-size: var(--fs-sm);
+  color: var(--fg-muted);
+  line-height: 1.6;
+}
+
+.dialog-body p:last-child {
+  margin-bottom: 0;
+}
+
+.dialog-hint {
+  padding-top: var(--s3);
+  border-top: 1px solid var(--border);
+}
+
+.dialog-details {
+  margin-top: var(--s5);
+  text-align: left;
+}
+
+.dialog-details summary {
+  font-size: var(--fs-meta);
+  color: var(--fg-subtle);
+  cursor: pointer;
+  padding: var(--s2) 0;
+}
+
+.dialog-details pre {
+  font-size: 0.7rem;
+  max-height: 9rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.dialog-actions {
+  display: flex;
+  gap: var(--s2);
+  justify-content: center;
+  margin-top: var(--s6);
+}
+
+/* The claimed amount, shown large in the success dialog. It is the one number the recipient came
+ * for, so it is not buried in a sentence. */
+.dialog-amount {
+  display: block;
+  font-size: 1.875rem;
+  font-weight: 620;
+  letter-spacing: -0.03em;
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+  margin: var(--s2) 0 var(--s1);
+}
+
+.dialog-amount .unit {
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--fg-subtle);
+  margin-left: 0.35rem;
+  letter-spacing: 0;
+}
+
+/* ==========================================================================
    motion
    --------------------------------------------------------------------------
    One reveal: opacity plus a short upward move. Applied per section, not per element, so the
@@ -3682,6 +4137,15 @@ textarea.text-input {
 
   .metric-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* Five full labels stop fitting well before they stop fitting. */
+  .stepper-label-full {
+    display: none;
+  }
+
+  .stepper-label-short {
+    display: inline;
   }
 
   /* ---- app shell becomes a drawer ---- */
@@ -3896,6 +4360,33 @@ textarea.text-input {
 
   .app-content {
     padding-bottom: var(--s12);
+  }
+}
+
+/* ---- narrow: the stepper drops to markers only ---- */
+@media (max-width: 620px) {
+  /* Even the short labels collide below this. The markers still convey position and progress, and
+   * the panel heading underneath names the current step — so nothing is lost but the repetition. */
+  .stepper-label {
+    display: none;
+  }
+
+  .stepper-button {
+    justify-content: center;
+    padding-inline: var(--s2);
+    min-height: 3rem;
+  }
+
+  .dialog {
+    padding: var(--s6) var(--s5) var(--s5);
+  }
+
+  .dialog-actions {
+    flex-direction: column-reverse;
+  }
+
+  .dialog-actions .btn {
+    width: 100%;
   }
 }
 

@@ -2,9 +2,15 @@
  * Organization console.
  *
  * Drives one round through the contract's state machine: create → fund → commit → compute →
- * finalize. The page deliberately reads the round's status from the chain after every action rather
- * than tracking a local step counter, because the chain is the only account of where a round
- * actually is — a browser that missed a receipt would otherwise offer an action that must revert.
+ * finalize, as a five-step flow showing one step at a time.
+ *
+ * ## The step is derived, never counted
+ *
+ * `stepForRound()` computes which step a round has reached purely from its on-chain status. There
+ * is no local step counter, because the chain is the only account of where a round actually is —
+ * a browser that missed a receipt would otherwise keep offering an action that must revert. The
+ * viewing position is separate state, and is clamped to the derived step after every refresh, so
+ * a completed action always advances the view and a stale tab corrects itself.
  *
  * ## The confidential path
  *
@@ -15,28 +21,39 @@
  * ## What this page will not let you skip
  *
  * Downloading the ciphertext before committing to it. See lib/vault.ts: `requestCompute` accepts
- * only bytes matching the on-chain commitment, and re-encrypting the same policy produces different
- * bytes because ECIES draws a fresh ephemeral key each time. Losing the file strands the round.
+ * only bytes matching the on-chain commitment, and re-encrypting the same policy produces
+ * different bytes because ECIES draws a fresh ephemeral key each time. Losing the file strands
+ * the round.
  */
 
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { parseEther, type Address, type Hex } from "viem";
 import { usePublicClient, useWalletClient, useAccount } from "wagmi";
 
 import { PolicyBuilder, type PolicyDraftResult } from "@/components/PolicyBuilder";
 import { RequireWallet } from "@/components/Wallet";
+import { Stepper } from "@/components/app/Stepper";
+import { Dialog, ErrorDialog } from "@/components/ui/Dialog";
+import {
+  IconArrowRight,
+  IconCheck,
+  IconChevronRight,
+  IconLock,
+  IconShieldCheck,
+} from "@/components/ui/Icons";
+import { StatusBadge } from "@/components/ui/StatusBadge";
 import {
   COSTON2,
   FIDENSUR_READ_ABI,
   FIDENSUR_WRITE_ABI,
   NATIVE_TOKEN,
-  formatAmount,
-  statusName,
   type Round,
 } from "@/lib/contracts";
+import { humanizeError, type FriendlyError } from "@/lib/errors";
+import { formatTokenAmount } from "@/lib/format";
 import { randomSalt, sealPolicy, type Policy } from "@/lib/policy";
 import { ProxyClient } from "@/lib/proxy";
 import { downloadPolicy, loadPolicy, savePolicy, parsePolicyFile } from "@/lib/vault";
@@ -53,6 +70,27 @@ const OPEN = 1;
 const COMMITTED = 2;
 const COMPUTING = 3;
 const FINALIZED = 4;
+
+/** Mirrors MIN_CLAIM_WINDOW / MAX_CLAIM_WINDOW in Fidensur.sol. */
+const MIN_WINDOW_SECONDS = 3_600n;
+const MAX_WINDOW_SECONDS = 31_536_000n;
+
+type Step = 0 | 1 | 2 | 3 | 4;
+
+/**
+ * Which step a round has reached, from chain status alone.
+ *
+ * Funding is step 1 but is not a status of its own — a round stays `Open` whether or not it holds
+ * money — so it is decided by the balance rather than the enum.
+ */
+function stepForRound(round: Round | null): Step {
+  if (!round) return 0;
+  if (round.status >= FINALIZED) return 4;
+  if (round.status === COMPUTING) return 3;
+  if (round.status === COMMITTED) return 3;
+  if (round.status === OPEN) return round.funded > 0n ? 2 : 1;
+  return 0;
+}
 
 export default function OrgConsolePage() {
   return (
@@ -85,12 +123,16 @@ function Console({ contract }: { contract: Address }) {
   const [roundId, setRoundId] = useState<bigint | null>(null);
   const [round, setRound] = useState<Round | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [log, setLog] = useState<string[]>([]);
+  const [failure, setFailure] = useState<FriendlyError | null>(null);
+  const [success, setSuccess] = useState<{ title: string; body: React.ReactNode } | null>(null);
 
-  const note = useCallback((message: string) => {
-    setLog((prev) => [...prev, message]);
-  }, []);
+  // Where the user is looking. Clamped to the round's real progress after every read, so a
+  // completed action always carries the view forward.
+  const [viewing, setViewing] = useState<Step>(0);
+  const [direction, setDirection] = useState<"forward" | "back">("forward");
+  const previousStep = useRef<Step>(0);
+
+  const reached = stepForRound(round);
 
   const refresh = useCallback(async () => {
     if (!publicClient || roundId === null) return;
@@ -101,29 +143,35 @@ function Console({ contract }: { contract: Address }) {
       args: [roundId],
     })) as Round;
     setRound(data);
+    setViewing(stepForRound(data));
   }, [publicClient, contract, roundId]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
+  // Slide direction is whichever way the step number moved.
+  useEffect(() => {
+    setDirection(viewing >= previousStep.current ? "forward" : "back");
+    previousStep.current = viewing;
+  }, [viewing]);
+
   /**
-   * Runs one on-chain action, holding the UI in a busy state and surfacing the revert reason.
+   * Runs one action, holding the UI busy and translating any failure into a sentence.
    *
    * viem decodes custom errors only when they are present in the ABI, which is why
-   * FIDENSUR_ERRORS_ABI is spread into every ABI in contracts.ts. Without it a failure here reads
-   * "reverted with signature 0x6a4fd69d", which tells the user nothing.
+   * FIDENSUR_ERRORS_ABI is spread into every ABI in contracts.ts. Without it, `humanizeError`
+   * would have nothing but a four-byte selector to work with.
    */
   const run = useCallback(
     async (label: string, fn: () => Promise<void>) => {
       setBusy(label);
-      setError(null);
+      setFailure(null);
       try {
         await fn();
         await refresh();
       } catch (e) {
-        const message = e instanceof Error ? e.message : String(e);
-        setError(message);
+        setFailure(humanizeError(e));
       } finally {
         setBusy(null);
       }
@@ -150,6 +198,7 @@ function Console({ contract }: { contract: Address }) {
             `page — a network switched after connecting is not always propagated.`,
         );
       }
+
       const { request } = await publicClient.simulateContract({
         address: contract,
         abi: FIDENSUR_WRITE_ABI,
@@ -159,41 +208,39 @@ function Console({ contract }: { contract: Address }) {
         value,
       } as never);
       const hash = await walletClient.writeContract(request as never);
-      note(`${functionName}: ${hash}`);
       const receipt = await publicClient.waitForTransactionReceipt({ hash });
       if (receipt.status !== "success") throw new Error(`${functionName} reverted`);
       return hash;
     },
-    [publicClient, walletClient, walletLoading, walletError, chainId, contract, note],
+    [publicClient, walletClient, walletLoading, walletError, chainId, contract],
   );
 
   const isOrganization =
     round && address ? round.organization.toLowerCase() === address.toLowerCase() : true;
 
+  const shared = { send, run, busy, setSuccess } as const;
+
   return (
     <>
-      <RoundPicker
-        contract={contract}
-        roundId={roundId}
-        onSelect={setRoundId}
-        send={send}
-        run={run}
-        busy={busy}
-        note={note}
-      />
-
-      {error && (
-        <div className="callout fail">
-          <strong>Transaction failed.</strong>
-          <pre>
-            <code>{error}</code>
-          </pre>
-        </div>
-      )}
-
-      {round && roundId !== null && (
+      {roundId === null || !round ? (
+        <CreateRound
+          contract={contract}
+          onOpened={(id) => {
+            setRoundId(id);
+            setViewing(0);
+          }}
+          run={run}
+          send={send}
+          busy={busy}
+        />
+      ) : (
         <>
-          <RoundFacts roundId={roundId} round={round} />
+          <RoundHeader roundId={roundId} round={round} onClose={() => {
+            setRoundId(null);
+            setRound(null);
+          }} />
+
+          <Stepper current={viewing} furthest={reached} onSelect={(s) => setViewing(s as Step)} />
 
           {!isOrganization && (
             <div className="callout warn">
@@ -203,99 +250,79 @@ function Console({ contract }: { contract: Address }) {
             </div>
           )}
 
-          {round.status === OPEN && (
-            <>
-              <FundStep roundId={roundId} round={round} send={send} run={run} busy={busy} />
-              {round.funded > 0n && address && (
-                <CommitStep
+          <div className="wizard">
+            <div className="wizard-panel" data-direction={direction} key={viewing}>
+              {viewing === 0 && <CreatedPanel roundId={roundId} round={round} onNext={() => setViewing(1)} />}
+              {viewing === 1 && (
+                <FundPanel roundId={roundId} round={round} reached={reached} {...shared} onNext={() => setViewing(2)} />
+              )}
+              {viewing === 2 && address && (
+                <PolicyPanel
                   contract={contract}
                   roundId={roundId}
+                  round={round}
                   organization={address}
-                  send={send}
-                  run={run}
-                  busy={busy}
-                  note={note}
+                  {...shared}
                 />
               )}
-            </>
-          )}
-
-          {round.status === COMMITTED && (
-            <ComputeStep roundId={roundId} round={round} send={send} run={run} busy={busy} />
-          )}
-
-          {round.status === COMPUTING && (
-            <FinalizeStep roundId={roundId} round={round} send={send} run={run} busy={busy} note={note} />
-          )}
-
-          {round.status >= FINALIZED && (
-            <section className="step">
-              <h2>Done</h2>
-              <div className="callout pass">
-                <strong>Round {String(roundId)} is {statusName(round.status).toLowerCase()}.</strong>{" "}
-                The chain now holds a Merkle root, a total and a count — and no individual
-                allocation.
-              </div>
-              <p>
-                <Link href={`/verify/${roundId}`}>Open the public verification report →</Link>
-              </p>
-              <p className="hint">
-                Recipients can now request a disclosure and claim from the{" "}
-                <Link href="/claim">claim page</Link>. Tell them the round number; they need nothing
-                else from you.
-              </p>
-            </section>
-          )}
+              {viewing === 3 && <ComputePanel roundId={roundId} round={round} {...shared} />}
+              {viewing === 4 && <SettledPanel roundId={roundId} round={round} />}
+            </div>
+          </div>
         </>
       )}
 
-      {log.length > 0 && (
-        <section className="step">
-          <h2>Activity</h2>
-          <pre>
-            <code>{log.join("\n")}</code>
-          </pre>
-        </section>
-      )}
+      <ErrorDialog error={failure} onClose={() => setFailure(null)} />
+
+      <Dialog
+        open={success !== null}
+        tone="success"
+        title={success?.title ?? ""}
+        onClose={() => setSuccess(null)}
+        primary={{ label: "Continue" }}
+      >
+        {success?.body}
+      </Dialog>
     </>
   );
 }
 
-// ---------------------------------------------------------------------------
+/* ------------------------------------------------------------------ create */
 
-function RoundPicker({
+function CreateRound({
   contract,
-  roundId,
-  onSelect,
-  send,
+  onOpened,
   run,
+  send,
   busy,
-  note,
 }: {
   contract: Address;
-  roundId: bigint | null;
-  onSelect: (id: bigint) => void;
-  send: (fn: string, args: unknown[], value?: bigint) => Promise<Hex>;
+  onOpened: (id: bigint) => void;
   run: (label: string, fn: () => Promise<void>) => Promise<void>;
+  send: (fn: string, args: unknown[], value?: bigint) => Promise<Hex>;
   busy: string | null;
-  note: (m: string) => void;
 }) {
   const publicClient = usePublicClient();
   const [days, setDays] = useState("7");
+  const [custom, setCustom] = useState(false);
   const [lookup, setLookup] = useState("");
+
+  const presets = ["7", "14", "30"];
 
   const create = () =>
     run("create", async () => {
-      const seconds = BigInt(Math.round(Number(days) * 86_400));
-      // Mirrors MIN_CLAIM_WINDOW (1 hour) and MAX_CLAIM_WINDOW (365 days) in Fidensur.sol. Checking
-      // here turns a wasted transaction and an InvalidClaimWindow revert into a sentence.
-      if (!Number.isFinite(Number(days))) throw new Error("claim window must be a number");
-      if (seconds < 3_600n) throw new Error("claim window must be at least 1 hour (0.042 days)");
-      if (seconds > 31_536_000n) throw new Error("claim window must be at most 365 days");
+      const value = Number(days);
+      if (!Number.isFinite(value)) throw new Error("The claim window must be a number of days.");
+      const seconds = BigInt(Math.round(value * 86_400));
+      if (seconds < MIN_WINDOW_SECONDS) {
+        throw new Error("The claim window must be at least 1 hour (0.042 days).");
+      }
+      if (seconds > MAX_WINDOW_SECONDS) {
+        throw new Error("The claim window must be at most 365 days.");
+      }
 
-      // Read nextRoundId first: createRound returns the id, but a transaction receipt carries logs
-      // rather than return values, and reading the counter before the call is simpler than decoding
-      // RoundCreated out of the receipt.
+      // Read nextRoundId first: createRound returns the id, but a receipt carries logs rather than
+      // return values, and reading the counter beforehand is simpler than decoding RoundCreated.
       const next = (await publicClient!.readContract({
         address: contract,
         abi: FIDENSUR_READ_ABI,
@@ -303,178 +330,330 @@ function RoundPicker({
       })) as bigint;
 
       await send("createRound", [NATIVE_TOKEN, seconds]);
-      note(`round ${next} created`);
-      onSelect(next);
+      onOpened(next);
     });
 
   return (
-    <section className="step">
-      <h2>Round</h2>
-      <div className="field-row">
-        <div className="field-group">
-          <label className="label" htmlFor="days">
-            Claim window (days)
-          </label>
-          <input
-            id="days"
-            className="text-input"
-            inputMode="decimal"
-            value={days}
-            onChange={(e) => setDays(e.target.value)}
-          />
-          <p className="hint">
-            After this expires, anyone can close the round and return everything unclaimed to you.
+    <section className="create-card">
+      <div className="create-head">
+        <span className="create-icon" aria-hidden="true">
+          <IconShieldCheck size={20} />
+        </span>
+        <div>
+          <h2>Start an allocation round</h2>
+          <p>
+            A round holds the funds and the commitment. Nothing about who gets what is decided
+            here — that comes later, encrypted, and never touches this page in the clear.
           </p>
         </div>
-        <div className="field-group">
-          <label className="label">&nbsp;</label>
-          <button className="wallet-btn" onClick={create} disabled={busy !== null}>
-            {busy === "create" ? "Creating…" : "Create a round"}
+      </div>
+
+      <div>
+        <span className="field-label" id="window-label">
+          Claim window
+        </span>
+        <div className="segmented" role="group" aria-labelledby="window-label">
+          {presets.map((preset) => (
+            <button
+              key={preset}
+              type="button"
+              aria-pressed={!custom && days === preset}
+              onClick={() => {
+                setCustom(false);
+                setDays(preset);
+              }}
+            >
+              {preset} days
+            </button>
+          ))}
+          <button type="button" aria-pressed={custom} onClick={() => setCustom(true)}>
+            Custom
           </button>
         </div>
-      </div>
 
-      <div className="field-row">
-        <div className="field-group">
-          <label className="label" htmlFor="lookup">
-            …or open an existing round
-          </label>
-          <div className="lookup">
+        {custom && (
+          <div style={{ marginTop: "var(--s3)", maxWidth: "12rem" }}>
             <input
-              id="lookup"
               className="text-input"
-              inputMode="numeric"
-              value={lookup}
-              onChange={(e) => setLookup(e.target.value)}
-              placeholder="round number"
+              inputMode="decimal"
+              value={days}
+              onChange={(e) => setDays(e.target.value)}
+              aria-label="Claim window in days"
+              placeholder="days"
             />
-            <button
-              className="wallet-btn"
-              disabled={!/^\d+$/.test(lookup.trim())}
-              onClick={() => onSelect(BigInt(lookup.trim()))}
-            >
-              Open
-            </button>
           </div>
-        </div>
+        )}
+
+        <p className="hint">
+          After this expires, anyone can close the round and return everything unclaimed to you.
+          Between 1 hour and 365 days.
+        </p>
       </div>
 
-      {roundId !== null && <p className="hint">Working on round {String(roundId)}.</p>}
-    </section>
-  );
-}
-
-function RoundFacts({ roundId, round }: { roundId: bigint; round: Round }) {
-  return (
-    <dl className="facts">
-      <div>
-        <dt>Round</dt>
-        <dd>{String(roundId)}</dd>
+      <div className="panel-actions">
+        <button className="btn btn-primary" onClick={create} disabled={busy !== null}>
+          {busy === "create" ? "Creating…" : "Create round"}
+          {busy !== "create" && <IconArrowRight size={15} className="btn-arrow" />}
+        </button>
       </div>
-      <div>
-        <dt>Status</dt>
-        <dd>{statusName(round.status)}</dd>
-      </div>
-      <div>
-        <dt>Token</dt>
-        <dd>{round.token === NATIVE_TOKEN ? "C2FLR (native)" : <code>{round.token}</code>}</dd>
-      </div>
-      <div>
-        <dt>Funded</dt>
-        <dd>{formatAmount(round.funded)} C2FLR</dd>
-      </div>
-      {round.status >= FINALIZED && (
-        <>
-          <div>
-            <dt>Allocated</dt>
-            <dd>{formatAmount(round.totalAllocated)} C2FLR</dd>
-          </div>
-          <div>
-            <dt>Recipients</dt>
-            <dd>{round.recipientCount}</dd>
-          </div>
-        </>
-      )}
-    </dl>
-  );
-}
 
-function FundStep({
-  roundId,
-  round,
-  send,
-  run,
-  busy,
-}: {
-  roundId: bigint;
-  round: Round;
-  send: (fn: string, args: unknown[], value?: bigint) => Promise<Hex>;
-  run: (label: string, fn: () => Promise<void>) => Promise<void>;
-  busy: string | null;
-}) {
-  const [amount, setAmount] = useState("");
+      <div className="create-divider">or continue an existing round</div>
 
-  const valid = /^\d+(\.\d+)?$/.test(amount.trim()) && Number(amount) > 0;
-
-  return (
-    <section className="step">
-      <h2>1. Fund the round</h2>
-      <p className="why">
-        The contract must hold the money before it can promise it. Funding is separate from the
-        policy on purpose — the amount is public, the split is not.
-      </p>
       <div className="lookup">
         <input
           className="text-input"
-          inputMode="decimal"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          placeholder="amount in C2FLR"
+          inputMode="numeric"
+          value={lookup}
+          onChange={(e) => setLookup(e.target.value)}
+          placeholder="Round number"
+          aria-label="Round number"
         />
         <button
-          className="wallet-btn"
-          disabled={!valid || busy !== null}
-          onClick={() =>
-            run("fund", async () => {
-              const wei = parseEther(amount.trim());
-              await send("fund", [roundId, wei], wei);
-              setAmount("");
-            })
-          }
+          className="btn btn-secondary"
+          disabled={!/^\d+$/.test(lookup.trim())}
+          onClick={() => onOpened(BigInt(lookup.trim()))}
         >
-          {busy === "fund" ? "Funding…" : "Fund"}
+          Open
         </button>
       </div>
-      {round.funded > 0n && (
-        <p className="hint">
-          Currently funded: {formatAmount(round.funded)} C2FLR. You can add more, or commit a policy
-          below.
-        </p>
-      )}
     </section>
   );
 }
 
-function CommitStep({
+/* ------------------------------------------------------------------ header */
+
+function RoundHeader({
+  roundId,
+  round,
+  onClose,
+}: {
+  roundId: bigint;
+  round: Round;
+  onClose: () => void;
+}) {
+  return (
+    <div className="page-head" style={{ marginBottom: "var(--s6)" }}>
+      <div>
+        <h2 style={{ fontSize: "1.375rem", margin: 0 }}>Round {String(roundId)}</h2>
+        <p style={{ margin: "var(--s2) 0 0", display: "flex", gap: "var(--s3)", alignItems: "center" }}>
+          <StatusBadge status={round.status} />
+          <span style={{ color: "var(--fg-muted)", fontSize: "var(--fs-meta)" }}>
+            {formatTokenAmount(round.funded)} C2FLR funded
+          </span>
+        </p>
+      </div>
+      <button className="btn btn-ghost btn-sm" onClick={onClose}>
+        Switch round
+      </button>
+    </div>
+  );
+}
+
+function PanelHead({ title, why }: { title: string; why: string }) {
+  return (
+    <>
+      <h2 style={{ margin: "0 0 var(--s2)", fontSize: "1.15rem" }}>{title}</h2>
+      <p className="why">{why}</p>
+    </>
+  );
+}
+
+function DoneNote({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="panel-done">
+      <span className="done-mark" aria-hidden="true">
+        <IconCheck size={11} />
+      </span>
+      <div>{children}</div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------- steps */
+
+function CreatedPanel({
+  roundId,
+  round,
+  onNext,
+}: {
+  roundId: bigint;
+  round: Round;
+  onNext: () => void;
+}) {
+  return (
+    <section className="step">
+      <PanelHead
+        title="Round created"
+        why="The token and the claim window are fixed on-chain. Everything after this point is about what goes into the round, and who it comes out to."
+      />
+
+      <dl className="facts">
+        <div>
+          <dt>Round</dt>
+          <dd>{String(roundId)}</dd>
+        </div>
+        <div>
+          <dt>Token</dt>
+          <dd>{round.token === NATIVE_TOKEN ? "C2FLR (native)" : <code>{round.token}</code>}</dd>
+        </div>
+        <div>
+          <dt>Claim window</dt>
+          <dd>{(round.claimWindow / 86_400).toFixed(2)} days</dd>
+        </div>
+        <div>
+          <dt>Organization</dt>
+          <dd>
+            <code>{round.organization}</code>
+          </dd>
+        </div>
+      </dl>
+
+      <div className="panel-actions">
+        <button className="btn btn-primary spacer" onClick={onNext}>
+          Continue
+          <IconChevronRight size={15} />
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function FundPanel({
+  roundId,
+  round,
+  reached,
+  send,
+  run,
+  busy,
+  setSuccess,
+  onNext,
+}: {
+  roundId: bigint;
+  round: Round;
+  reached: Step;
+  send: (fn: string, args: unknown[], value?: bigint) => Promise<Hex>;
+  run: (label: string, fn: () => Promise<void>) => Promise<void>;
+  busy: string | null;
+  setSuccess: (s: { title: string; body: React.ReactNode } | null) => void;
+  onNext: () => void;
+}) {
+  const [amount, setAmount] = useState("");
+  const valid = /^\d+(\.\d+)?$/.test(amount.trim()) && Number(amount) > 0;
+  const canEdit = round.status === OPEN;
+
+  return (
+    <section className="step">
+      <PanelHead
+        title="Fund the treasury"
+        why="The contract must hold the money before it can promise it. Funding is separate from the policy on purpose — the amount is public, the split is not."
+      />
+
+      {round.funded > 0n && (
+        <DoneNote>
+          <strong>{formatTokenAmount(round.funded)} C2FLR is held by this round.</strong> You can add
+          more while it is still open.
+        </DoneNote>
+      )}
+
+      {canEdit && (
+        <div className="lookup" style={{ marginTop: "var(--s5)" }}>
+          <input
+            className="text-input"
+            inputMode="decimal"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder="Amount in C2FLR"
+            aria-label="Amount to fund in C2FLR"
+          />
+          <button
+            className="btn btn-primary"
+            disabled={!valid || busy !== null}
+            onClick={() =>
+              run("fund", async () => {
+                const wei = parseEther(amount.trim());
+                await send("fund", [roundId, wei], wei);
+                setAmount("");
+                setSuccess({
+                  title: "Treasury funded",
+                  body: (
+                    <p>
+                      <span className="dialog-amount">
+                        {formatTokenAmount(wei)}
+                        <span className="unit">C2FLR</span>
+                      </span>
+                      is now held by round {String(roundId)}.
+                    </p>
+                  ),
+                });
+              })
+            }
+          >
+            {busy === "fund" ? "Funding…" : "Fund round"}
+          </button>
+        </div>
+      )}
+
+      <div className="panel-actions">
+        <button
+          className="btn btn-primary spacer"
+          disabled={reached < 2}
+          onClick={onNext}
+          title={reached < 2 ? "Fund the round to continue" : undefined}
+        >
+          Continue
+          <IconChevronRight size={15} />
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function PolicyPanel({
   contract,
   roundId,
+  round,
   organization,
   send,
   run,
   busy,
-  note,
+  setSuccess,
 }: {
   contract: Address;
   roundId: bigint;
+  round: Round;
   organization: Address;
   send: (fn: string, args: unknown[], value?: bigint) => Promise<Hex>;
   run: (label: string, fn: () => Promise<void>) => Promise<void>;
   busy: string | null;
-  note: (m: string) => void;
+  setSuccess: (s: { title: string; body: React.ReactNode } | null) => void;
 }) {
   const [draft, setDraft] = useState<PolicyDraftResult | null>(null);
   const [sealed, setSealed] = useState<{ ciphertext: Hex; commitment: Hex } | null>(null);
   const [saved, setSaved] = useState(false);
+
+  // Already committed: there is nothing to compose, and re-showing the builder would invite
+  // someone to author a policy that can no longer be submitted.
+  if (round.status >= COMMITTED) {
+    return (
+      <section className="step">
+        <PanelHead
+          title="Policy committed"
+          why="The chain records a hash of the ciphertext and nothing else. It binds this round to one exact policy without revealing a line of it."
+        />
+        <DoneNote>
+          <strong>Committed.</strong> The policy for this round is fixed and cannot be changed.
+        </DoneNote>
+        <dl className="facts">
+          <div>
+            <dt>Commitment</dt>
+            <dd>
+              <code>{round.policyCommitment}</code>
+            </dd>
+          </div>
+        </dl>
+      </section>
+    );
+  }
 
   const ready =
     draft !== null &&
@@ -485,7 +664,7 @@ function CommitStep({
   const seal = () =>
     run("seal", async () => {
       if (!PROXY_URL) throw new Error("NEXT_PUBLIC_EXT_PROXY_URL is not set");
-      if (!draft) throw new Error("no policy");
+      if (!draft) throw new Error("No policy has been composed yet.");
 
       // The enclave's public key comes from the proxy's attestation report, live. Hard-coding it
       // would survive a TEE re-registration and silently encrypt to a key nobody holds any more.
@@ -505,30 +684,36 @@ function CommitStep({
       };
 
       const result = await sealPolicy(policy, teePubKey);
-      savePolicy({ roundId: String(roundId), commitment: result.commitment, ciphertext: result.ciphertext });
+      savePolicy({
+        roundId: String(roundId),
+        commitment: result.commitment,
+        ciphertext: result.ciphertext,
+      });
       setSealed(result);
-      note(`sealed: ${result.commitment}`);
     });
 
   return (
     <section className="step">
-      <h2>2. Compose and commit the policy</h2>
-      <p className="why">
-        This is the only place the plaintext exists. It is encrypted in this tab and never
-        transmitted; the chain records nothing but a hash of the ciphertext.
-      </p>
-
-      <PolicyBuilder
-        contractAddr={contract}
-        roundId={roundId}
-        organization={organization}
-        onChange={setDraft}
+      <PanelHead
+        title="Compose and commit the policy"
+        why="This is the only place the plaintext exists. It is encrypted in this tab and never transmitted; the chain records nothing but a hash of the ciphertext."
       />
 
       {!sealed ? (
-        <button className="wallet-btn" disabled={!ready || busy !== null} onClick={seal}>
-          {busy === "seal" ? "Encrypting…" : "Encrypt policy"}
-        </button>
+        <>
+          <PolicyBuilder
+            contractAddr={contract}
+            roundId={roundId}
+            organization={organization}
+            onChange={setDraft}
+          />
+          <div className="panel-actions">
+            <button className="btn btn-primary spacer" disabled={!ready || busy !== null} onClick={seal}>
+              <IconLock size={15} />
+              {busy === "seal" ? "Encrypting…" : "Encrypt policy"}
+            </button>
+          </div>
+        </>
       ) : (
         <>
           <dl className="facts">
@@ -549,9 +734,9 @@ function CommitStep({
             advance the round: encrypting the same policy again draws a new ephemeral key and
             produces a different ciphertext with a different hash, which the contract rejects. Lose
             the file and the round can never be computed.
-            <div style={{ marginTop: "0.75rem" }}>
+            <div style={{ marginTop: "var(--s3)" }}>
               <button
-                className="wallet-btn"
+                className="btn btn-secondary btn-sm"
                 onClick={() => {
                   downloadPolicy({
                     roundId: String(roundId),
@@ -561,132 +746,154 @@ function CommitStep({
                   setSaved(true);
                 }}
               >
-                Download ciphertext
+                {saved ? "Download again" : "Download ciphertext"}
               </button>
             </div>
           </div>
 
-          <button
-            className="wallet-btn"
-            disabled={!saved || busy !== null}
-            onClick={() =>
-              run("commit", async () => {
-                await send("submitPolicy", [roundId, sealed.commitment]);
-              })
-            }
-          >
-            {busy === "commit" ? "Committing…" : "Commit on-chain"}
-          </button>
-          {!saved && <p className="hint">Download the ciphertext to enable this.</p>}
+          <div className="panel-actions">
+            {!saved && <span className="hint">Download the ciphertext to enable committing.</span>}
+            <button
+              className="btn btn-primary spacer"
+              disabled={!saved || busy !== null}
+              onClick={() =>
+                run("commit", async () => {
+                  await send("submitPolicy", [roundId, sealed.commitment]);
+                  setSuccess({
+                    title: "Policy committed",
+                    body: (
+                      <p>
+                        Round {String(roundId)} is now bound to one exact policy. The chain holds a
+                        hash of it and nothing more.
+                      </p>
+                    ),
+                  });
+                })
+              }
+            >
+              {busy === "commit" ? "Committing…" : "Commit on-chain"}
+            </button>
+          </div>
         </>
       )}
     </section>
   );
 }
 
-function ComputeStep({
+function ComputePanel({
   roundId,
   round,
   send,
   run,
   busy,
+  setSuccess,
 }: {
   roundId: bigint;
   round: Round;
   send: (fn: string, args: unknown[], value?: bigint) => Promise<Hex>;
   run: (label: string, fn: () => Promise<void>) => Promise<void>;
   busy: string | null;
+  setSuccess: (s: { title: string; body: React.ReactNode } | null) => void;
 }) {
   const stored = useMemo(() => loadPolicy(roundId), [roundId]);
   const [uploaded, setUploaded] = useState<Hex | null>(null);
+  const [result, setResult] = useState<ActionResult | null>(null);
+  const [polling, setPolling] = useState(false);
+  const [problem, setProblem] = useState<FriendlyError | null>(null);
 
   const ciphertext = uploaded ?? (stored?.ciphertext as Hex | undefined) ?? null;
   const matches = ciphertext !== null && stored?.commitment === round.policyCommitment;
 
-  return (
-    <section className="step">
-      <h2>3. Request the computation</h2>
-      <p className="why">
-        The ciphertext goes on-chain here, addressed to the enclave. Anyone can read those bytes;
-        only the TEE holds the key that makes them mean anything.
-      </p>
+  // ---- dispatch ----
+  if (round.status === COMMITTED) {
+    return (
+      <section className="step">
+        <PanelHead
+          title="Request the computation"
+          why="The ciphertext goes on-chain here, addressed to the enclave. Anyone can read those bytes; only the TEE holds the key that makes them mean anything."
+        />
 
-      {!ciphertext ? (
-        <div className="callout warn">
-          <strong>This browser does not have the ciphertext for round {String(roundId)}.</strong>{" "}
-          Upload the file you downloaded when you committed.
-          <div style={{ marginTop: "0.75rem" }}>
-            <input
-              type="file"
-              accept=".txt,text/plain"
-              onChange={async (e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                const parsed = parsePolicyFile(await file.text());
-                if (parsed) setUploaded(parsed);
-              }}
-            />
+        {!ciphertext ? (
+          <div className="callout warn">
+            <strong>This browser does not have the ciphertext for round {String(roundId)}.</strong>{" "}
+            Upload the file you downloaded when you committed.
+            <div style={{ marginTop: "var(--s3)" }}>
+              <input
+                type="file"
+                accept=".txt,text/plain"
+                aria-label="Ciphertext file"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const parsed = parsePolicyFile(await file.text());
+                  if (parsed) setUploaded(parsed);
+                  else
+                    setProblem({
+                      kind: "unknown",
+                      title: "That file wasn't readable",
+                      detail: "It doesn't contain a Fidensur ciphertext in the expected format.",
+                      hint: "Use the .txt file downloaded at the commit step, unedited.",
+                    });
+                }}
+              />
+            </div>
           </div>
-        </div>
-      ) : (
-        <>
-          <dl className="facts">
-            <div>
-              <dt>On-chain commitment</dt>
-              <dd>
-                <code>{round.policyCommitment}</code>
-              </dd>
-            </div>
-            <div>
-              <dt>Source</dt>
-              <dd>{uploaded ? "uploaded file" : "this browser"}</dd>
-            </div>
-          </dl>
-          {!matches && !uploaded && (
-            <div className="callout warn">
-              The stored ciphertext does not match the commitment on-chain. Upload the correct file
-              instead — <code>requestCompute</code> will reject a mismatch.
-            </div>
-          )}
-          <button
-            className="wallet-btn"
-            disabled={busy !== null}
-            onClick={() =>
-              run("compute", async () => {
-                await send("requestCompute", [roundId, ciphertext], INSTRUCTION_FEE);
-              })
-            }
-          >
-            {busy === "compute" ? "Sending…" : "Request computation"}
-          </button>
-        </>
-      )}
-    </section>
-  );
-}
+        ) : (
+          <>
+            <dl className="facts">
+              <div>
+                <dt>On-chain commitment</dt>
+                <dd>
+                  <code>{round.policyCommitment}</code>
+                </dd>
+              </div>
+              <div>
+                <dt>Ciphertext source</dt>
+                <dd>{uploaded ? "uploaded file" : "this browser"}</dd>
+              </div>
+            </dl>
 
-function FinalizeStep({
-  roundId,
-  round,
-  send,
-  run,
-  busy,
-  note,
-}: {
-  roundId: bigint;
-  round: Round;
-  send: (fn: string, args: unknown[], value?: bigint) => Promise<Hex>;
-  run: (label: string, fn: () => Promise<void>) => Promise<void>;
-  busy: string | null;
-  note: (m: string) => void;
-}) {
-  const [result, setResult] = useState<ActionResult | null>(null);
-  const [polling, setPolling] = useState(false);
-  const [problem, setProblem] = useState<string | null>(null);
+            {!matches && !uploaded && (
+              <div className="callout warn">
+                The stored ciphertext does not match the commitment on-chain. Upload the correct
+                file instead — the contract will reject a mismatch.
+              </div>
+            )}
 
+            <div className="panel-actions">
+              <button
+                className="btn btn-primary spacer"
+                disabled={busy !== null}
+                onClick={() =>
+                  run("compute", async () => {
+                    await send("requestCompute", [roundId, ciphertext], INSTRUCTION_FEE);
+                    setSuccess({
+                      title: "Sent to the enclave",
+                      body: (
+                        <p>
+                          The ciphertext is on its way. Come back to this step to collect the signed
+                          result — it usually takes under a minute.
+                        </p>
+                      ),
+                    });
+                  })
+                }
+              >
+                {busy === "compute" ? "Sending…" : "Request computation"}
+              </button>
+            </div>
+          </>
+        )}
+
+        <ErrorDialog error={problem} onClose={() => setProblem(null)} />
+      </section>
+    );
+  }
+
+  // ---- collect and relay ----
   const poll = async () => {
     if (!PROXY_URL) {
-      setProblem("NEXT_PUBLIC_EXT_PROXY_URL is not set");
+      setProblem(humanizeError(new Error("NEXT_PUBLIC_EXT_PROXY_URL is not set")));
       return;
     }
     setPolling(true);
@@ -698,13 +905,12 @@ function FinalizeStep({
       });
       if (found.status !== 1) {
         // The log is the enclave's own account of the refusal, and the only one there is.
-        setProblem(`The enclave rejected the instruction: ${found.log ?? "(no reason given)"}`);
+        setProblem(humanizeError(new Error(found.log ?? "The enclave rejected the instruction.")));
         return;
       }
       setResult(found);
-      note(`result ready for ${round.computeInstructionId}`);
     } catch (e) {
-      setProblem(e instanceof Error ? e.message : String(e));
+      setProblem(humanizeError(e));
     } finally {
       setPolling(false);
     }
@@ -712,12 +918,10 @@ function FinalizeStep({
 
   return (
     <section className="step">
-      <h2>4. Collect and relay the result</h2>
-      <p className="why">
-        The enclave signs its answer; the chain verifies that signature. Relaying is permissionless —
-        anyone holding the signed result can submit it, so you cannot suppress an outcome you dislike
-        by declining to send this transaction.
-      </p>
+      <PanelHead
+        title="Collect and relay the result"
+        why="The enclave signs its answer; the chain verifies that signature. Relaying is permissionless — anyone holding the signed result can submit it, so you cannot suppress an outcome you dislike by declining to send this transaction."
+      />
 
       <dl className="facts">
         <div>
@@ -728,46 +932,101 @@ function FinalizeStep({
         </div>
       </dl>
 
-      {problem && (
-        <div className="callout fail">
-          <strong>No usable result.</strong>
-          <p>{problem}</p>
-          <p className="hint">
-            If the TEE never answers, <code>requestCompute</code> can be retried after 30 minutes
-            with the same ciphertext.
-          </p>
-        </div>
-      )}
-
       {!result ? (
-        <button className="wallet-btn" disabled={polling} onClick={poll}>
-          {polling ? "Waiting for the enclave…" : "Check for the result"}
-        </button>
+        <div className="panel-actions">
+          <button className="btn btn-primary spacer" disabled={polling} onClick={poll}>
+            {polling ? "Waiting for the enclave…" : "Check for the result"}
+          </button>
+        </div>
       ) : (
         <>
-          <div className="callout pass">
+          <DoneNote>
             <strong>Signed result received.</strong> The contract will re-derive the same hash and
             recover the signer before accepting it.
+          </DoneNote>
+          <div className="panel-actions">
+            <button
+              className="btn btn-primary spacer"
+              disabled={busy !== null}
+              onClick={() =>
+                run("finalize", async () => {
+                  await send("finalizeRound", [
+                    result.data,
+                    result.actionId,
+                    result.submissionTag,
+                    result.status,
+                    result.signature,
+                  ]);
+                  setSuccess({
+                    title: "Round finalized",
+                    body: (
+                      <p>
+                        The chain now holds a Merkle root, a total and a count — and no individual
+                        allocation. Recipients can claim.
+                      </p>
+                    ),
+                  });
+                })
+              }
+            >
+              {busy === "finalize" ? "Finalizing…" : "Finalize round"}
+            </button>
           </div>
-          <button
-            className="wallet-btn"
-            disabled={busy !== null}
-            onClick={() =>
-              run("finalize", async () => {
-                await send("finalizeRound", [
-                  result.data,
-                  result.actionId,
-                  result.submissionTag,
-                  result.status,
-                  result.signature,
-                ]);
-              })
-            }
-          >
-            {busy === "finalize" ? "Finalizing…" : "Finalize round"}
-          </button>
         </>
       )}
+
+      <ErrorDialog error={problem} onClose={() => setProblem(null)} />
+    </section>
+  );
+}
+
+function SettledPanel({ roundId, round }: { roundId: bigint; round: Round }) {
+  return (
+    <section className="step">
+      <PanelHead
+        title="Settled"
+        why="The round is finalized. What is public is an aggregate; what is private stayed private."
+      />
+
+      <DoneNote>
+        <strong>Round {String(roundId)} is complete.</strong> Recipients can request a disclosure
+        and claim without you mediating.
+      </DoneNote>
+
+      <dl className="facts">
+        <div>
+          <dt>Allocated</dt>
+          <dd>{formatTokenAmount(round.totalAllocated)} C2FLR</dd>
+        </div>
+        <div>
+          <dt>Recipients</dt>
+          <dd>{round.recipientCount}</dd>
+        </div>
+        <div>
+          <dt>Claimed so far</dt>
+          <dd>{formatTokenAmount(round.totalClaimed)} C2FLR</dd>
+        </div>
+        <div>
+          <dt>Merkle root</dt>
+          <dd>
+            <code>{round.merkleRoot}</code>
+          </dd>
+        </div>
+      </dl>
+
+      <div className="panel-actions">
+        <Link className="btn btn-secondary" href="/claim">
+          Recipient portal
+        </Link>
+        <Link className="btn btn-primary spacer" href={`/verify/${roundId}`}>
+          Verification report
+          <IconArrowRight size={15} className="btn-arrow" />
+        </Link>
+      </div>
+
+      <p className="hint">
+        Tell recipients the round number; they need nothing else from you.
+      </p>
     </section>
   );
 }

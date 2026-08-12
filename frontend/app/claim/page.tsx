@@ -16,6 +16,13 @@
  * Claiming is self-disclosure. `AllocationClaimed` carries the amount in the clear, so the moment a
  * recipient spends their allocation they publish it. That is inherent — a payment that moves real
  * value cannot also be invisible — and it is said plainly below rather than discovered afterwards.
+ *
+ * ## Eligibility
+ *
+ * Two different failures mean "you are not in this round": the enclave declining a disclosure
+ * request, and `BadMerkleProof` on the claim itself. Both are surfaced as one plain sentence
+ * rather than as a revert. See lib/errors.ts — `BadMerkleProof` is classified as an eligibility
+ * problem for exactly this reason.
  */
 
 "use client";
@@ -26,15 +33,19 @@ import { formatEther, decodeAbiParameters, parseEventLogs, type Address, type He
 import { useAccount, usePublicClient, useWalletClient } from "wagmi";
 
 import { RequireWallet } from "@/components/Wallet";
+import { Dialog, ErrorDialog } from "@/components/ui/Dialog";
+import { IconCheck, IconLock } from "@/components/ui/Icons";
+import { StatusBadge } from "@/components/ui/StatusBadge";
 import {
   FIDENSUR_EVENTS_ABI,
   FIDENSUR_READ_ABI,
   FIDENSUR_WRITE_ABI,
-  formatAmount,
   statusName,
   type Round,
 } from "@/lib/contracts";
 import { decryptDisclosure, generateDisclosureKeypair } from "@/lib/ecies";
+import { humanizeError, type FriendlyError } from "@/lib/errors";
+import { formatDateTime, formatTokenAmount } from "@/lib/format";
 import { checkDisclosure, type Disclosure } from "@/lib/merkle";
 import { ProxyClient } from "@/lib/proxy";
 
@@ -76,32 +87,62 @@ function Portal({ contract }: { contract: Address }) {
   const [roundId, setRoundId] = useState<bigint | null>(null);
   const [round, setRound] = useState<Round | null>(null);
   const [disclosure, setDisclosure] = useState<Disclosure | null>(null);
-  const [claimed, setClaimed] = useState(false);
+  // Two pieces of state, not one. `claimed` is permanent for this session — it disables the claim
+  // button and swaps in the settled note. `celebrating` is just the dialog, which the user closes.
+  // Collapsing them would mean dismissing the congratulation re-enables a button that can no
+  // longer succeed.
+  const [claimed, setClaimed] = useState<bigint | null>(null);
+  const [celebrating, setCelebrating] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<FriendlyError | null>(null);
 
+  const guard = async (label: string, fn: () => Promise<void>) => {
+    setBusy(label);
+    setFailure(null);
+    try {
+      await fn();
+    } catch (e) {
+      setFailure(humanizeError(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const fetchRound = useCallback(
+    async (id: bigint) =>
+      (await publicClient!.readContract({
+        address: contract,
+        abi: FIDENSUR_READ_ABI,
+        functionName: "getRound",
+        args: [id],
+      })) as Round,
+    [publicClient, contract],
+  );
+
+  /**
+   * Opens a round from the lookup box.
+   *
+   * Clears the disclosure and the claim state, because those belong to whichever round was open
+   * before. Re-reading the *same* round after a claim must not go through here — it would discard
+   * the disclosure and take the claim panel off screen before the recipient had seen it settle.
+   */
   const load = useCallback(
     async (id: bigint) => {
       setBusy("load");
-      setError(null);
+      setFailure(null);
       setDisclosure(null);
-      setClaimed(false);
+      setClaimed(null);
+      setCelebrating(false);
       try {
-        const data = (await publicClient!.readContract({
-          address: contract,
-          abi: FIDENSUR_READ_ABI,
-          functionName: "getRound",
-          args: [id],
-        })) as Round;
         setRoundId(id);
-        setRound(data);
+        setRound(await fetchRound(id));
       } catch (e) {
-        setError(e instanceof Error ? e.message : String(e));
+        setFailure(humanizeError(e));
       } finally {
         setBusy(null);
       }
     },
-    [publicClient, contract],
+    [fetchRound],
   );
 
   /**
@@ -145,8 +186,9 @@ function Portal({ contract }: { contract: Address }) {
       });
       if (result.status !== 1) {
         // The enclave refuses rather than returning an empty success, so that this endpoint is not
-        // a quieter way to test whether an address is in the round.
-        throw new Error(result.log ?? "the enclave declined the request");
+        // a quieter way to test whether an address is in the round. A refusal here almost always
+        // means the caller is not a recipient, which is what the user is told.
+        throw new EligibilityError(result.log);
       }
 
       const [requester, , ciphertext] = decodeAbiParameters(
@@ -161,33 +203,26 @@ function Portal({ contract }: { contract: Address }) {
       setDisclosure(await decryptDisclosure<Disclosure>(ciphertext, keys.privateKey));
     });
 
-  const guard = async (label: string, fn: () => Promise<void>) => {
-    setBusy(label);
-    setError(null);
-    try {
-      await fn();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(null);
-    }
-  };
-
   const claim = () =>
     guard("claim", async () => {
       if (!disclosure || roundId === null) throw new Error("no disclosure");
+      const amount = BigInt(disclosure.amount);
+
       const { request: sim } = await publicClient!.simulateContract({
         address: contract,
         abi: FIDENSUR_WRITE_ABI,
         functionName: "claim",
-        args: [roundId, BigInt(disclosure.index), BigInt(disclosure.amount), disclosure.proof],
+        args: [roundId, BigInt(disclosure.index), amount, disclosure.proof],
         account: walletClient!.account,
       } as never);
       const hash = await walletClient!.writeContract(sim as never);
       const receipt = await publicClient!.waitForTransactionReceipt({ hash });
       if (receipt.status !== "success") throw new Error("claim reverted");
-      setClaimed(true);
-      await load(roundId);
+
+      // `fetchRound`, not `load` — the disclosure and the settled panel must survive this.
+      setRound(await fetchRound(roundId));
+      setClaimed(amount);
+      setCelebrating(true);
     });
 
   const check = disclosure && round ? checkDisclosure(disclosure, round.merkleRoot) : null;
@@ -196,7 +231,7 @@ function Portal({ contract }: { contract: Address }) {
   return (
     <>
       <section className="step">
-        <h2>Which round?</h2>
+        <h2 style={{ marginTop: 0 }}>Which round?</h2>
         <p className="why">
           You need only the round number. The organization does not have to send you anything, and
           cannot stop you asking.
@@ -207,26 +242,18 @@ function Portal({ contract }: { contract: Address }) {
             inputMode="numeric"
             value={lookup}
             onChange={(e) => setLookup(e.target.value)}
-            placeholder="round number"
+            placeholder="Round number"
+            aria-label="Round number"
           />
           <button
-            className="wallet-btn"
+            className="btn btn-primary"
             disabled={!/^\d+$/.test(lookup.trim()) || busy !== null}
             onClick={() => load(BigInt(lookup.trim()))}
           >
-            {busy === "load" ? "Loading…" : "Load"}
+            {busy === "load" ? "Loading…" : "Load round"}
           </button>
         </div>
       </section>
-
-      {error && (
-        <div className="callout fail">
-          <strong>Failed.</strong>
-          <pre>
-            <code>{error}</code>
-          </pre>
-        </div>
-      )}
 
       {round && roundId !== null && (
         <>
@@ -237,7 +264,9 @@ function Portal({ contract }: { contract: Address }) {
             </div>
             <div>
               <dt>Status</dt>
-              <dd>{statusName(round.status)}</dd>
+              <dd>
+                <StatusBadge status={round.status} />
+              </dd>
             </div>
             <div>
               <dt>Recipients</dt>
@@ -245,11 +274,7 @@ function Portal({ contract }: { contract: Address }) {
             </div>
             <div>
               <dt>Claim closes</dt>
-              <dd>
-                {round.claimDeadline
-                  ? new Date(round.claimDeadline * 1000).toLocaleString()
-                  : "not yet set"}
-              </dd>
+              <dd>{round.claimDeadline ? formatDateTime(round.claimDeadline) : "not yet set"}</dd>
             </div>
           </dl>
 
@@ -262,7 +287,7 @@ function Portal({ contract }: { contract: Address }) {
 
           {round.status >= COMPUTING && (
             <section className="step">
-              <h2>1. Ask what you were allocated</h2>
+              <h2 style={{ marginTop: 0 }}>1. Ask what you were allocated</h2>
               <p className="why">
                 A fresh keypair is generated in this tab. The enclave encrypts its answer to it, so
                 the reply is public bytes with private content — asking reveals that you asked,
@@ -271,7 +296,8 @@ function Portal({ contract }: { contract: Address }) {
 
               {!disclosure ? (
                 <>
-                  <button className="wallet-btn" disabled={busy !== null} onClick={request}>
+                  <button className="btn btn-primary" disabled={busy !== null} onClick={request}>
+                    <IconLock size={15} />
                     {busy === "disclose" ? "Waiting for the enclave…" : "Request my allocation"}
                   </button>
                   <p className="hint">
@@ -284,7 +310,7 @@ function Portal({ contract }: { contract: Address }) {
                   <div>
                     <dt>Your allocation</dt>
                     <dd>
-                      <strong>{formatEther(BigInt(disclosure.amount))} C2FLR</strong>
+                      <strong>{formatTokenAmount(BigInt(disclosure.amount))} C2FLR</strong>
                     </dd>
                   </div>
                   <div>
@@ -302,7 +328,7 @@ function Portal({ contract }: { contract: Address }) {
 
           {disclosure && check && (
             <section className="step">
-              <h2>2. Check it before you spend it</h2>
+              <h2 style={{ marginTop: 0 }}>2. Check it before you spend it</h2>
               <p className="why">
                 The enclave told you a number. Rather than take its word, the proof is re-verified
                 here against the root the contract actually holds.
@@ -328,36 +354,45 @@ function Portal({ contract }: { contract: Address }) {
 
           {disclosure && check?.ok && (
             <section className="step">
-              <h2>3. Claim</h2>
+              <h2 style={{ marginTop: 0 }}>3. Claim</h2>
 
-              <div className="callout warn">
-                <strong>Claiming makes your amount public.</strong> The transaction emits{" "}
-                <code>AllocationClaimed</code> with the amount in the clear, so from this point
-                anyone can see what you received. That is inherent — money that moves cannot also be
-                invisible — and it is your decision, not a side effect.
-              </div>
-
-              {claimed ? (
-                <div className="callout pass">
-                  <strong>Claimed.</strong> {formatAmount(BigInt(disclosure.amount))} C2FLR has been
-                  transferred to you.
-                </div>
-              ) : round.status !== FINALIZED ? (
-                <div className="callout unknown">
-                  The round is not finalized yet, so claims are not open. Someone must relay the
-                  signed result first — anyone can, not only the organization.
-                </div>
-              ) : windowClosed ? (
-                <div className="callout fail">
-                  <strong>The claim window has closed.</strong> Unclaimed allocations return to the
-                  organization when the round is closed.
+              {claimed !== null ? (
+                <div className="panel-done">
+                  <span className="done-mark" aria-hidden="true">
+                    <IconCheck size={11} />
+                  </span>
+                  <div>
+                    <strong>Claimed.</strong> {formatTokenAmount(claimed)} C2FLR has been
+                    transferred to your wallet. Each allocation can only be claimed once.
+                  </div>
                 </div>
               ) : (
-                <button className="wallet-btn" disabled={busy !== null} onClick={claim}>
-                  {busy === "claim"
-                    ? "Claiming…"
-                    : `Claim ${formatEther(BigInt(disclosure.amount))} C2FLR`}
-                </button>
+                <>
+                  <div className="callout warn">
+                    <strong>Claiming makes your amount public.</strong> The transaction emits{" "}
+                    <code>AllocationClaimed</code> with the amount in the clear, so from this point
+                    anyone can see what you received. That is inherent — money that moves cannot be
+                    invisible — and it is your decision, not a side effect.
+                  </div>
+
+                  {round.status !== FINALIZED ? (
+                    <div className="callout unknown">
+                      The round is not finalized yet, so claims are not open. Someone must relay the
+                      signed result first — anyone can, not only the organization.
+                    </div>
+                  ) : windowClosed ? (
+                    <div className="callout fail">
+                      <strong>The claim window has closed.</strong> Unclaimed allocations return to
+                      the organization when the round is closed.
+                    </div>
+                  ) : (
+                    <button className="btn btn-primary" disabled={busy !== null} onClick={claim}>
+                      {busy === "claim"
+                        ? "Claiming…"
+                        : `Claim ${formatTokenAmount(BigInt(disclosure.amount))} C2FLR`}
+                    </button>
+                  )}
+                </>
               )}
             </section>
           )}
@@ -370,6 +405,41 @@ function Portal({ contract }: { contract: Address }) {
           )}
         </>
       )}
+
+      <ErrorDialog error={failure} onClose={() => setFailure(null)} />
+
+      <Dialog
+        open={celebrating}
+        tone="success"
+        title="Allocation claimed"
+        onClose={() => setCelebrating(false)}
+        primary={{ label: "Done" }}
+      >
+        <p>
+          <span className="dialog-amount">
+            {claimed !== null ? formatTokenAmount(claimed) : ""}
+            <span className="unit">C2FLR</span>
+          </span>
+          has been transferred to your wallet.
+        </p>
+        <p className="dialog-hint">
+          Round {roundId !== null ? String(roundId) : ""} is settled for you. Nobody learned anyone
+          else&rsquo;s allocation in the process.
+        </p>
+      </Dialog>
     </>
   );
+}
+
+/**
+ * The enclave declining a disclosure request.
+ *
+ * A distinct type so `humanizeError` can say "you are not eligible for this round" rather than
+ * relaying the enclave's own wording, which is written for an operator reading a log.
+ */
+class EligibilityError extends Error {
+  constructor(log?: string) {
+    super(log ?? "not a recipient of this round");
+    this.name = "EligibilityError";
+  }
 }
