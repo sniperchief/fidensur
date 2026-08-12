@@ -215,8 +215,11 @@ function Console({ contract }: { contract: Address }) {
     [publicClient, walletClient, walletLoading, walletError, chainId, contract],
   );
 
-  const isOrganization =
-    round && address ? round.organization.toLowerCase() === address.toLowerCase() : true;
+  // Three states, not two. Defaulting an unknown viewer to "is the organization" flashes the
+  // whole wizard for a frame while the wallet resolves, and defaulting to "is not" flashes the
+  // refusal card at the person who actually owns the round. Neither is worth the brevity.
+  const viewerIsOrganization: boolean | null =
+    round && address ? round.organization.toLowerCase() === address.toLowerCase() : null;
 
   const shared = { send, run, busy, setSuccess } as const;
 
@@ -233,6 +236,18 @@ function Console({ contract }: { contract: Address }) {
           send={send}
           busy={busy}
         />
+      ) : viewerIsOrganization === null ? (
+        <p className="hint">Checking this round…</p>
+      ) : !viewerIsOrganization ? (
+        <ForeignRound
+          roundId={roundId}
+          round={round}
+          onClose={() => {
+            setRoundId(null);
+            setRound(null);
+          }}
+          {...shared}
+        />
       ) : (
         <>
           <RoundHeader roundId={roundId} round={round} onClose={() => {
@@ -241,14 +256,6 @@ function Console({ contract }: { contract: Address }) {
           }} />
 
           <Stepper current={viewing} furthest={reached} onSelect={(s) => setViewing(s as Step)} />
-
-          {!isOrganization && (
-            <div className="callout warn">
-              <strong>You are not this round&rsquo;s organization.</strong> It belongs to{" "}
-              <code>{round.organization}</code>. Only that account can fund, commit, or request a
-              computation.
-            </div>
-          )}
 
           <div className="wizard">
             <div className="wizard-panel" data-direction={direction} key={viewing}>
@@ -446,6 +453,130 @@ function RoundHeader({
         Switch round
       </button>
     </div>
+  );
+}
+
+/**
+ * A round belonging to somebody else.
+ *
+ * The console is a place to *run* a round, and presenting its workflow to someone who cannot act
+ * on it implies a standing they do not have. So the wizard is replaced outright rather than
+ * disabled.
+ *
+ * ## This is clarity, not confidentiality
+ *
+ * Every value shown below comes from `getRound()`, a public view. Anyone can read it from the
+ * block explorer without a wallet, and /verify/[round] publishes most of it to strangers on
+ * purpose. Hiding the stepper from a visitor conceals nothing — it just stops the page implying
+ * they have work to do here. The genuinely private things, the plaintext policy and the
+ * ciphertext, live in the organization's browser and were never reachable from this page.
+ *
+ * ## The one thing a stranger may still do
+ *
+ * Relay a signed result. `finalizeRound` has no organization check, deliberately: the landing
+ * page and the compute step both say that an outcome cannot be suppressed by declining to send
+ * the transaction. Removing the relay here for tidiness would quietly retract a claim the product
+ * makes about itself, so a `Computing` round still offers it.
+ *
+ * Funding is *also* unrestricted on-chain, and is deliberately **not** offered — depositing into
+ * someone else's round is almost always a mistake, and there is no interface worth building for
+ * the case where it is not.
+ */
+function ForeignRound({
+  roundId,
+  round,
+  onClose,
+  send,
+  run,
+  busy,
+  setSuccess,
+}: {
+  roundId: bigint;
+  round: Round;
+  onClose: () => void;
+  send: (fn: string, args: unknown[], value?: bigint) => Promise<Hex>;
+  run: (label: string, fn: () => Promise<void>) => Promise<void>;
+  busy: string | null;
+  setSuccess: (s: { title: string; body: React.ReactNode } | null) => void;
+}) {
+  return (
+    <>
+      <section className="create-card">
+        <div className="create-head">
+          <span className="create-icon" aria-hidden="true">
+            <IconLock size={20} />
+          </span>
+          <div>
+            <h2>Round {String(roundId)} isn&rsquo;t yours to run</h2>
+            <p>
+              It belongs to <code>{round.organization}</code>. Only that account can fund it,
+              commit a policy, or request its computation.
+            </p>
+          </div>
+        </div>
+
+        <dl className="facts">
+          <div>
+            <dt>Status</dt>
+            <dd>
+              <StatusBadge status={round.status} />
+            </dd>
+          </div>
+          <div>
+            <dt>Funded</dt>
+            <dd>{formatTokenAmount(round.funded)} C2FLR</dd>
+          </div>
+          {round.status >= FINALIZED && (
+            <>
+              <div>
+                <dt>Allocated</dt>
+                <dd>{formatTokenAmount(round.totalAllocated)} C2FLR</dd>
+              </div>
+              <div>
+                <dt>Recipients</dt>
+                <dd>{round.recipientCount}</dd>
+              </div>
+            </>
+          )}
+        </dl>
+
+        <p className="hint">
+          These figures are public on-chain — this console is simply not where you act on them. The
+          allocation behind them is not public, here or anywhere.
+        </p>
+
+        <div className="panel-actions">
+          <button className="btn btn-ghost" onClick={onClose}>
+            Open a different round
+          </button>
+          <Link className="btn btn-secondary" href="/claim">
+            Claim an allocation
+          </Link>
+          <Link className="btn btn-primary spacer" href={`/verify/${roundId}`}>
+            Verification report
+            <IconArrowRight size={15} className="btn-arrow" />
+          </Link>
+        </div>
+      </section>
+
+      {round.status === COMPUTING && (
+        <>
+          <div className="callout unknown" style={{ marginTop: "var(--s6)" }}>
+            <strong>You can still relay this round&rsquo;s result.</strong> Anyone holding the
+            enclave&rsquo;s signed answer may submit it — the contract trusts the signature, not the
+            sender. That is what stops an organization burying an outcome it dislikes.
+          </div>
+          <ComputePanel
+            roundId={roundId}
+            round={round}
+            send={send}
+            run={run}
+            busy={busy}
+            setSuccess={setSuccess}
+          />
+        </>
+      )}
+    </>
   );
 }
 

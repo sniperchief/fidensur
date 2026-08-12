@@ -34,7 +34,7 @@ import { useAccount, usePublicClient, useWalletClient } from "wagmi";
 
 import { RequireWallet } from "@/components/Wallet";
 import { Dialog, ErrorDialog } from "@/components/ui/Dialog";
-import { IconCheck, IconLock } from "@/components/ui/Icons";
+import { IconCheck, IconInbox, IconLock } from "@/components/ui/Icons";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import {
   FIDENSUR_EVENTS_ABI,
@@ -230,13 +230,23 @@ function Portal({ contract }: { contract: Address }) {
 
   return (
     <>
-      <section className="step">
-        <h2 style={{ marginTop: 0 }}>Which round?</h2>
-        <p className="why">
+      <section className="lookup-card">
+        <span className="create-icon" aria-hidden="true">
+          <IconInbox size={20} />
+        </span>
+        <h2>Which round?</h2>
+        <p>
           You need only the round number. The organization does not have to send you anything, and
           cannot stop you asking.
         </p>
-        <div className="lookup">
+
+        <form
+          className="lookup"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (/^\d+$/.test(lookup.trim())) load(BigInt(lookup.trim()));
+          }}
+        >
           <input
             className="text-input"
             inputMode="numeric"
@@ -247,12 +257,12 @@ function Portal({ contract }: { contract: Address }) {
           />
           <button
             className="btn btn-primary"
+            type="submit"
             disabled={!/^\d+$/.test(lookup.trim()) || busy !== null}
-            onClick={() => load(BigInt(lookup.trim()))}
           >
             {busy === "load" ? "Loading…" : "Load round"}
           </button>
-        </div>
+        </form>
       </section>
 
       {round && roundId !== null && (

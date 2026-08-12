@@ -356,53 +356,14 @@ pre code {
   padding-inline: var(--s6);
 }
 
-.shell-narrow {
-  max-width: var(--shell-narrow);
-}
-
 .section {
   position: relative;
   padding-block: var(--section-y);
 }
 
-.section-tight {
-  padding-block: clamp(3rem, 5vw, 4.5rem);
-}
-
 .section-subtle {
   background: var(--bg-subtle);
   border-block: 1px solid var(--border);
-}
-
-.section-deep {
-  background: var(--inverse-bg);
-  color: var(--inverse-fg);
-}
-
-.section-deep h2,
-.section-deep h3 {
-  color: var(--inverse-fg);
-}
-
-.section-deep p {
-  color: var(--inverse-muted);
-}
-
-/* `.section-heading .lede` is two classes deep and would otherwise beat `.section-deep p`,
- * leaving dark-grey body text on a near-black panel. */
-.section-deep .section-heading .lede {
-  color: var(--inverse-muted);
-}
-
-/* A callout keeps its own light verdict surface on a dark section — it is meant to interrupt.
- * Its text has to come back to the foreground colour or it inherits the inverse one and
- * disappears into the pale background. */
-.section-deep .callout {
-  color: var(--fg);
-}
-
-.section-deep .callout p {
-  color: inherit;
 }
 
 /* ==========================================================================
@@ -447,11 +408,6 @@ pre code {
 }
 
 /* A single hairline rule, used to mark the vertical axis of a diagram. */
-.rule-v {
-  width: 1px;
-  background: var(--border);
-  justify-self: center;
-}
 
 /* Everything that must sit above the grid. */
 .section > .shell,
@@ -475,10 +431,6 @@ pre code {
   text-transform: uppercase;
   color: var(--accent);
   margin: 0 0 var(--s4);
-}
-
-.section-deep .eyebrow {
-  color: var(--inverse-muted);
 }
 
 .eyebrow::before {
@@ -600,47 +552,10 @@ pre code {
   color: var(--fg);
 }
 
-.btn-quiet {
-  background: transparent;
-  color: var(--fg-muted);
-  border-color: transparent;
-  box-shadow: none;
-}
-
-.btn-quiet:hover:not(:disabled) {
-  background: var(--surface-2);
-  color: var(--fg);
-}
-
 .btn-warn,
 .wallet-btn.warn {
   background: var(--warn);
   color: var(--warn-on);
-}
-
-/* On an inverse block the primary button inverts too, rather than keeping a navy fill that would
- * disappear into the background. */
-.section-deep .btn-primary {
-  background: var(--bg);
-  color: var(--inverse-bg);
-}
-
-.section-deep .btn-primary:hover:not(:disabled) {
-  background: var(--bg);
-  color: var(--inverse-bg);
-  opacity: 0.9;
-}
-
-.section-deep .btn-secondary {
-  background: transparent;
-  color: var(--inverse-fg);
-  border-color: var(--border-inverse);
-}
-
-.section-deep .btn-secondary:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--inverse-fg);
-  border-color: rgba(255, 255, 255, 0.28);
 }
 
 .btn-sm {
@@ -684,12 +599,6 @@ pre code {
     transform 0.18s var(--ease);
 }
 
-.card-hover:hover {
-  border-color: var(--border-strong);
-  box-shadow: var(--shadow-md);
-  transform: translateY(-2px);
-}
-
 .card h3 {
   font-size: var(--fs-h3);
   margin: 0 0 var(--s2);
@@ -700,21 +609,6 @@ pre code {
   color: var(--fg-muted);
   font-size: var(--fs-sm);
   line-height: 1.65;
-}
-
-.card-accent {
-  border-color: var(--accent-line);
-  background: var(--accent-soft);
-}
-
-.card-grid {
-  display: grid;
-  gap: var(--s4);
-  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
-}
-
-.card-grid-3 {
-  grid-template-columns: repeat(3, 1fr);
 }
 
 /* ==========================================================================
@@ -1351,143 +1245,6 @@ pre code {
 }
 
 /* ==========================================================================
-   trust strip
-   ========================================================================== */
-
-.trust-strip {
-  border-block: 1px solid var(--border);
-  background: var(--bg-subtle);
-}
-
-.trust-list {
-  list-style: none;
-  margin: 0;
-  padding: var(--s5) 0;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--s4) var(--s8);
-  justify-content: space-between;
-}
-
-.trust-list li {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.55rem;
-  font-size: var(--fs-meta);
-  font-weight: 500;
-  color: var(--fg-muted);
-  letter-spacing: 0.01em;
-}
-
-.trust-list li svg {
-  color: var(--fg-subtle);
-  flex: none;
-}
-
-/* ==========================================================================
-   comparison (problem section)
-   ========================================================================== */
-
-.compare-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: var(--s4);
-}
-
-.compare-card {
-  display: flex;
-  flex-direction: column;
-  padding: var(--s6);
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  background: var(--surface);
-  box-shadow: var(--shadow-sm);
-}
-
-/* One ring, not two: an accent border *and* a 1px accent shadow at the same offset stack into a
- * 2px outline that reads as a focus state rather than emphasis. */
-.compare-card[data-solution="true"] {
-  border-color: var(--accent);
-  box-shadow: var(--shadow-md);
-}
-
-.compare-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--s3);
-  margin-bottom: var(--s4);
-}
-
-.compare-card h3 {
-  font-size: var(--fs-h3);
-  margin: 0;
-}
-
-.compare-card > p {
-  margin: 0 0 var(--s5);
-  color: var(--fg-muted);
-  font-size: var(--fs-sm);
-  line-height: 1.65;
-}
-
-/* The two-axis read: private? verifiable? Two lines per card, same order in every card, so the
- * comparison is scannable down the columns rather than requiring three paragraphs to be held in
- * mind at once. */
-.compare-traits {
-  list-style: none;
-  margin: auto 0 0;
-  padding: var(--s4) 0 0;
-  border-top: 1px solid var(--border);
-  display: grid;
-  gap: var(--s3);
-}
-
-.compare-traits li {
-  display: flex;
-  align-items: center;
-  gap: var(--s3);
-  font-size: var(--fs-meta);
-  color: var(--fg-muted);
-}
-
-.compare-traits .trait-label {
-  margin-right: auto;
-}
-
-.trait-mark {
-  display: inline-grid;
-  place-items: center;
-  width: 1.125rem;
-  height: 1.125rem;
-  border-radius: 50%;
-  flex: none;
-  border: 1px solid currentColor;
-}
-
-.trait-mark[data-ok="true"] {
-  color: var(--pass);
-}
-
-.trait-mark[data-ok="false"] {
-  color: var(--fail);
-}
-
-.trait-value {
-  font-weight: 600;
-  font-size: var(--fs-meta);
-}
-
-.trait-value[data-ok="true"] {
-  color: var(--pass);
-}
-
-.trait-value[data-ok="false"] {
-  color: var(--fail);
-}
-
-/* ==========================================================================
    process diagram (how it works)
    ========================================================================== */
 
@@ -1657,191 +1414,6 @@ pre code {
 }
 
 /* ==========================================================================
-   TEE section
-   ========================================================================== */
-
-.tee-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
-  gap: clamp(2.5rem, 5vw, 4.5rem);
-  align-items: center;
-}
-
-.enclave {
-  position: relative;
-  display: grid;
-  justify-items: stretch;
-  max-width: 27rem;
-  width: 100%;
-  margin-inline: auto;
-}
-
-.enclave-box {
-  border: 1px solid var(--inverse-bg);
-  border-radius: var(--r-lg);
-  background: var(--inverse-bg);
-  color: var(--inverse-fg);
-  padding: var(--s5);
-  box-shadow: var(--shadow-lg);
-  overflow: hidden;
-  position: relative;
-}
-
-/* A faint grid inside the enclave, at the same rhythm as the page grid — it reads as the same
- * material seen from inside. */
-.enclave-box::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background-image: linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
-  background-size: 28px 28px;
-  pointer-events: none;
-}
-
-.enclave-head {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--s3);
-  padding-bottom: var(--s4);
-  margin-bottom: var(--s4);
-  border-bottom: 1px solid var(--border-inverse);
-}
-
-.enclave-title {
-  font-family: var(--mono);
-  font-size: var(--fs-label);
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--inverse-fg);
-}
-
-.enclave-seal {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-family: var(--mono);
-  font-size: 0.625rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--inverse-muted);
-}
-
-.enclave-ops {
-  position: relative;
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: var(--s2);
-}
-
-.enclave-ops li {
-  display: flex;
-  align-items: center;
-  gap: var(--s3);
-  padding: 0.55rem 0.7rem;
-  border: 1px solid var(--border-inverse);
-  border-radius: var(--r-sm);
-  background: rgba(255, 255, 255, 0.03);
-  font-size: var(--fs-meta);
-  color: var(--inverse-fg);
-}
-
-.enclave-ops .op-index {
-  font-family: var(--mono);
-  font-size: 0.625rem;
-  color: var(--inverse-muted);
-}
-
-.enclave-ops .op-state {
-  margin-left: auto;
-  font-family: var(--mono);
-  font-size: 0.625rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--inverse-muted);
-}
-
-.enclave-note {
-  position: relative;
-  margin: var(--s4) 0 0;
-  font-size: var(--fs-meta);
-  color: var(--inverse-muted);
-  line-height: 1.55;
-}
-
-.io-node {
-  border: 1px dashed var(--border-strong);
-  border-radius: var(--r);
-  background: var(--surface);
-  padding: var(--s3) var(--s4);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--s3);
-}
-
-.io-node .flow-label {
-  color: var(--fg-subtle);
-}
-
-.io-node[data-tone="pass"] {
-  border-style: solid;
-  border-color: var(--pass-border);
-  background: var(--pass-bg);
-}
-
-/* Inside a two-column layout the heading is followed by sibling content, not by a whole section,
- * so it takes the tighter of the two spacings. */
-.tee-layout .section-heading,
-.explorer-cta .section-heading {
-  margin-bottom: 0;
-}
-
-.tee-points {
-  list-style: none;
-  margin: var(--s8) 0 0;
-  padding: 0;
-  display: grid;
-  gap: var(--s5);
-}
-
-.tee-points li {
-  display: grid;
-  grid-template-columns: 1.5rem 1fr;
-  gap: var(--s4);
-  align-items: start;
-}
-
-.tee-points .point-mark {
-  display: grid;
-  place-items: center;
-  width: 1.5rem;
-  height: 1.5rem;
-  border-radius: var(--r-sm);
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--accent);
-  margin-top: 1px;
-}
-
-.tee-points h3 {
-  font-size: 0.9375rem;
-  margin: 0 0 0.15rem;
-}
-
-.tee-points p {
-  margin: 0;
-  font-size: var(--fs-sm);
-  color: var(--fg-muted);
-  line-height: 1.6;
-}
-
-/* ==========================================================================
    verification panel (landing illustration)
    ========================================================================== */
 
@@ -2006,6 +1578,304 @@ pre code {
 }
 
 /* ==========================================================================
+   why Flare — the trust comparison
+   ========================================================================== */
+
+.trust-compare {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s4);
+}
+
+.trust-lane {
+  display: flex;
+  flex-direction: column;
+  padding: var(--s6);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.trust-lane[data-kind="with"] {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-md);
+}
+
+.lane-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s3);
+  flex-wrap: wrap;
+  margin-bottom: var(--s5);
+}
+
+.lane-label {
+  font-size: var(--fs-h3);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+.lane-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--s2);
+  counter-reset: lane;
+}
+
+.lane-steps li {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s3);
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--surface-inset);
+  font-size: var(--fs-meta);
+  line-height: 1.5;
+  color: var(--fg-muted);
+}
+
+/* The steps that introduce somebody to trust. Marked, not merely coloured. */
+.lane-steps li[data-flagged="true"] {
+  border-color: var(--fail-border);
+  background: var(--fail-bg);
+  color: var(--fail);
+  font-weight: 500;
+}
+
+.lane-mark {
+  display: grid;
+  place-items: center;
+  width: 1.125rem;
+  height: 1.125rem;
+  flex: none;
+  margin-top: 1px;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+  opacity: 0.7;
+}
+
+.lane-note {
+  margin: var(--s5) 0 0;
+  padding-top: var(--s4);
+  border-top: 1px solid var(--border);
+  font-size: var(--fs-sm);
+  color: var(--fg-muted);
+  line-height: 1.6;
+}
+
+.chain-state {
+  margin-top: var(--s6);
+  padding: var(--s6);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--surface-inset);
+}
+
+.chain-state-label {
+  display: block;
+  font-family: var(--mono);
+  font-size: var(--fs-label);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fg-subtle);
+  margin-bottom: var(--s4);
+}
+
+.chain-state dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s4);
+}
+
+.chain-state dt {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  color: var(--accent);
+  margin-bottom: 0.2rem;
+}
+
+.chain-state dt code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.8rem;
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.chain-state dd {
+  margin: 0;
+  font-size: var(--fs-meta);
+  color: var(--fg-muted);
+  line-height: 1.5;
+}
+
+/* ==========================================================================
+   evidence grid — the "check it yourself" block
+   ========================================================================== */
+
+.evidence-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s4);
+}
+
+.evidence-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+  padding: var(--s6);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.18s var(--ease), box-shadow 0.18s var(--ease);
+}
+
+.evidence-card:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-md);
+}
+
+.evidence-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+}
+
+.evidence-head h3 {
+  font-size: var(--fs-h3);
+  margin: 0;
+}
+
+.evidence-head svg {
+  color: var(--accent);
+  flex: none;
+}
+
+.evidence-card p {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--fg-muted);
+  line-height: 1.6;
+}
+
+.evidence-card pre {
+  margin: 0;
+  font-size: 0.7rem;
+  background: var(--surface-inset);
+}
+
+.evidence-card .evidence-link {
+  margin-top: auto;
+  padding-top: var(--s2);
+  font-size: var(--fs-meta);
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+/* ==========================================================================
+   use cases
+   --------------------------------------------------------------------------
+   Hairline separators rather than gaps: six cards read as one table of contents, which is the
+   point — they are facets of one product, not six features.
+   ========================================================================== */
+
+.usecase-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.usecase {
+  padding: var(--s6);
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  transition: background 0.18s var(--ease);
+}
+
+.usecase:nth-child(3n) {
+  border-right: none;
+}
+
+.usecase:nth-last-child(-n + 3) {
+  border-bottom: none;
+}
+
+.usecase:hover {
+  background: var(--surface-inset);
+}
+
+.usecase h3 {
+  font-size: var(--fs-h3);
+  margin: 0 0 var(--s2);
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+}
+
+.usecase h3 svg {
+  color: var(--accent);
+  flex: none;
+}
+
+.usecase p {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--fg-muted);
+  line-height: 1.6;
+}
+
+/* ==========================================================================
+   limits — the two caveats
+   --------------------------------------------------------------------------
+   Deliberately not a warning callout. Amber and a left rule read as "something went wrong";
+   these are neither errors nor warnings, they are the honest boundaries of the claim, and
+   dressing them as alerts makes them easier to dismiss than to read.
+   ========================================================================== */
+
+.limits {
+  max-width: 46rem;
+  margin: var(--s12) auto 0;
+  padding-top: var(--s8);
+  border-top: 1px solid var(--border-strong);
+}
+
+.limits h3 {
+  font-size: var(--fs-h3);
+  margin: 0 0 var(--s4);
+}
+
+.limits p {
+  margin: 0 0 var(--s4);
+  font-size: var(--fs-sm);
+  color: var(--fg-muted);
+  line-height: 1.7;
+}
+
+.limits p:last-child {
+  margin-bottom: 0;
+}
+
+.limits strong {
+  color: var(--fg);
+}
+
+/* ==========================================================================
    explorer CTA
    ========================================================================== */
 
@@ -2106,111 +1976,6 @@ pre code {
 
 .explorer-cta :focus-visible {
   outline-color: var(--on-accent-fg);
-}
-
-/* ==========================================================================
-   use cases
-   ========================================================================== */
-
-.usecase-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0;
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  overflow: hidden;
-  background: var(--surface);
-}
-
-/* Hairline separators rather than gaps: six cards read as one table of contents, which is the
- * point — they are facets of one product, not six features. */
-.usecase {
-  padding: var(--s6);
-  border-right: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-  transition: background 0.18s var(--ease);
-}
-
-.usecase:nth-child(3n) {
-  border-right: none;
-}
-
-.usecase:nth-last-child(-n + 3) {
-  border-bottom: none;
-}
-
-.usecase:hover {
-  background: var(--surface-inset);
-}
-
-.usecase h3 {
-  font-size: var(--fs-h3);
-  margin: 0 0 var(--s2);
-  display: flex;
-  align-items: center;
-  gap: var(--s3);
-}
-
-.usecase h3 svg {
-  color: var(--accent);
-  flex: none;
-}
-
-.usecase p {
-  margin: 0;
-  font-size: var(--fs-sm);
-  color: var(--fg-muted);
-  line-height: 1.6;
-}
-
-/* ==========================================================================
-   trust chain (security section)
-   ========================================================================== */
-
-.chain {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: var(--s4);
-  counter-reset: chain;
-}
-
-.chain-stage {
-  position: relative;
-  padding: var(--s6);
-  border: 1px solid var(--border-inverse);
-  border-radius: var(--r-lg);
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.chain-stage .stage-label {
-  font-family: var(--mono);
-  font-size: var(--fs-label);
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--inverse-muted);
-}
-
-.chain-stage h3 {
-  font-size: 0.9375rem;
-  margin: var(--s3) 0 var(--s2);
-}
-
-.chain-stage p {
-  margin: 0;
-  font-size: var(--fs-meta);
-  line-height: 1.6;
-}
-
-/* Arrow between stages, drawn in the gutter. */
-.chain-stage:not(:last-child)::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  right: calc(var(--s4) * -1);
-  width: var(--s4);
-  height: 1px;
-  background: var(--border-inverse);
 }
 
 /* ==========================================================================
@@ -2980,45 +2745,6 @@ pre code {
   cursor: not-allowed;
 }
 
-/* Numbered explanation of the mechanism. Cards rather than paragraphs, because the order is the
- * point and a wall of prose hides it. */
-.steps-grid {
-  list-style: none;
-  margin: var(--s4) 0 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
-  gap: var(--s3);
-}
-
-.steps-grid li {
-  padding: var(--s5);
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  background: var(--surface);
-  box-shadow: var(--shadow-sm);
-}
-
-.steps-grid .step-num {
-  font-family: var(--mono);
-  font-size: var(--fs-label);
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  color: var(--accent);
-}
-
-.steps-grid h3 {
-  font-size: 1rem;
-  margin: var(--s2) 0 var(--s2);
-}
-
-.steps-grid p {
-  margin: 0;
-  font-size: var(--fs-sm);
-  color: var(--fg-muted);
-  line-height: 1.6;
-}
-
 /* Key/value list. Used everywhere; the workhorse. */
 .facts {
   border: 1px solid var(--border);
@@ -3742,9 +3468,15 @@ textarea.text-input {
    round creation card
    ========================================================================== */
 
-.create-card {
+/* Centred and capped. These cards are a single decision each — start a round, open a round — and
+ * a form stretched across a 52rem column reads as more work than it is. */
+.create-card,
+.lookup-card {
   position: relative;
   overflow: hidden;
+  width: 100%;
+  max-width: 38rem;
+  margin-inline: auto;
   padding: clamp(1.5rem, 3vw, 2.25rem);
   border: 1px solid var(--border);
   border-radius: var(--r-xl);
@@ -3752,9 +3484,37 @@ textarea.text-input {
   box-shadow: var(--shadow-md);
 }
 
+/* The claim page's round lookup: the same card, centred content, since it asks exactly one
+ * question and has no second column to align against. */
+.lookup-card {
+  text-align: center;
+  max-width: 34rem;
+}
+
+.lookup-card .create-icon {
+  margin: 0 auto var(--s4);
+}
+
+.lookup-card h2 {
+  font-size: 1.15rem;
+  margin: 0 0 var(--s2);
+}
+
+.lookup-card p {
+  margin: 0 auto;
+  max-width: 30rem;
+  font-size: var(--fs-sm);
+  color: var(--fg-muted);
+}
+
+.lookup-card .lookup {
+  margin-top: var(--s6);
+}
+
 /* The same technical grid as the marketing site, at low strength — it ties the console to the
  * product rather than letting it look like a different application. */
-.create-card::before {
+.create-card::before,
+.lookup-card::before {
   content: "";
   position: absolute;
   inset: 0;
@@ -3766,7 +3526,8 @@ textarea.text-input {
   mask-image: linear-gradient(to bottom right, #000, transparent 55%);
 }
 
-.create-card > * {
+.create-card > *,
+.lookup-card > * {
   position: relative;
 }
 
@@ -3865,6 +3626,179 @@ textarea.text-input {
   flex: 1;
   height: 1px;
   background: var(--border);
+}
+
+/* ==========================================================================
+   recipient editor
+   --------------------------------------------------------------------------
+   Two fields per row rather than one delimited string. A comma cannot be forgotten when there is
+   no comma, and a bad address is marked on the row that has it.
+   ========================================================================== */
+
+.recipients {
+  margin: var(--s6) 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--surface-inset);
+  overflow: hidden;
+}
+
+.recipients-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  padding: var(--s3) var(--s4);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.recipient-rows {
+  list-style: none;
+  margin: 0;
+  padding: var(--s3);
+  display: grid;
+  gap: var(--s2);
+}
+
+.recipient-row {
+  display: grid;
+  grid-template-columns: 1.75rem minmax(0, 1fr) 8rem 2.25rem;
+  gap: var(--s2);
+  align-items: center;
+}
+
+.recipient-index {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--fg-subtle);
+  text-align: right;
+}
+
+/* The address field is the long one and gets the elastic column; the value stays a fixed width so
+ * a column of amounts lines up down the list. */
+.recipient-row .text-input {
+  font-size: 0.85rem;
+  padding: 0.5rem 0.6rem;
+  background: var(--bg);
+}
+
+.recipient-value {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Only rows the user has actually filled in are marked wrong. An untouched row is empty, not
+ * invalid, and outlining it in red the moment it appears is hostile. */
+.recipient-row[data-state="bad"] .text-input:first-of-type {
+  border-color: var(--fail);
+  background: var(--fail-bg);
+}
+
+.recipient-row[data-state="ok"] .recipient-index {
+  color: var(--pass);
+}
+
+.row-remove {
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--fg-subtle);
+  cursor: pointer;
+  transition: background 0.15s var(--ease), color 0.15s var(--ease),
+    border-color 0.15s var(--ease);
+}
+
+.row-remove:hover:not(:disabled) {
+  background: var(--fail-bg);
+  border-color: var(--fail-border);
+  color: var(--fail);
+}
+
+.row-remove:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.row-error {
+  margin: var(--s2) 0 0;
+  font-size: var(--fs-meta);
+  color: var(--fail);
+}
+
+.recipients-empty {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  gap: var(--s2);
+  padding: var(--s8) var(--s5);
+}
+
+.recipients-empty p {
+  margin: 0;
+  max-width: 26rem;
+  font-size: var(--fs-sm);
+  color: var(--fg-muted);
+}
+
+.recipients-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  flex-wrap: wrap;
+  padding: var(--s3) var(--s4);
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.recipients-tally {
+  font-size: var(--fs-meta);
+  color: var(--fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.bulk-paste {
+  padding: var(--s4);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.bulk-paste code {
+  font-size: 0.75rem;
+}
+
+@media (max-width: 620px) {
+  /* Stacked: the address needs the full width on a phone, and an 8rem amount column beside it
+   * leaves neither usable. Every child is placed explicitly — auto-placement would push the
+   * remove button onto its own row once the value moves down. */
+  .recipient-row {
+    grid-template-columns: 1.75rem minmax(0, 1fr) 2.25rem;
+    row-gap: var(--s2);
+    align-items: start;
+  }
+
+  .recipient-index {
+    grid-area: 1 / 1 / 2 / 2;
+    padding-top: 0.6rem;
+  }
+
+  .recipient-row .text-input:first-of-type {
+    grid-area: 1 / 2 / 2 / 3;
+  }
+
+  .recipient-value {
+    grid-area: 2 / 2 / 3 / 3;
+  }
+
+  .row-remove {
+    grid-area: 1 / 3 / 2 / 4;
+  }
 }
 
 /* ==========================================================================
@@ -4075,13 +4009,8 @@ textarea.text-input {
     display: none;
   }
 
-  .chain {
-    grid-template-columns: repeat(2, 1fr);
-    gap: var(--s4);
-  }
-
-  .chain-stage:not(:last-child)::after {
-    display: none;
+  .trust-compare {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -4110,11 +4039,17 @@ textarea.text-input {
     grid-template-columns: 1fr;
   }
 
-  .compare-grid,
-  .card-grid-3 {
+  .trust-compare,
+  .evidence-grid {
     grid-template-columns: 1fr;
   }
 
+  .chain-state dl {
+    grid-template-columns: 1fr;
+  }
+
+  /* Two across, so the hairline borders have to be reassigned: the third-child rule that removed
+   * the right border now applies to every second card, and the last row is the final two. */
   .usecase-grid {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -4294,10 +4229,6 @@ textarea.text-input {
     grid-template-columns: 1fr;
   }
 
-  .chain {
-    grid-template-columns: 1fr;
-  }
-
   .footer-top {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--s8) var(--s5);
@@ -4345,11 +4276,6 @@ textarea.text-input {
 
   .check .value {
     grid-column: 1;
-  }
-
-  .trust-list {
-    gap: var(--s3) var(--s5);
-    justify-content: flex-start;
   }
 
   .match-grid {

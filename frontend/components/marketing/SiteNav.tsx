@@ -18,10 +18,13 @@ import { useEffect, useState } from "react";
 import { Brand } from "@/components/Brand";
 import { IconClose, IconMenu } from "@/components/ui/Icons";
 
+// Four, not five. "Use cases" lost its slot to "Why Flare": a visitor who wants examples will
+// scroll and find them, whereas the question of why this needs Flare at all is one that gets
+// asked and then never answered if the page does not offer it.
 const LINKS = [
   { href: "/#how-it-works", label: "How it works" },
+  { href: "/#why-flare", label: "Why Flare" },
   { href: "/#verification", label: "Verification" },
-  { href: "/#use-cases", label: "Use cases" },
   { href: "/verify", label: "Explorer" },
 ];
 

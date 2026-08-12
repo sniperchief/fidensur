@@ -14,8 +14,8 @@
 const STEPS = [
   {
     n: "01",
-    title: "Create the round",
-    body: "The organization opens a round, names the token and sets a claim window, then funds it. The amount is public; nothing about the split is decided yet.",
+    title: "Put the money in",
+    body: "You open a round and fund it. The amount is public. Nothing about who gets what is decided yet.",
     figure: (
       <>
         <span className="figure-line" data-w="full" data-tone="ghost" />
@@ -27,8 +27,8 @@ const STEPS = [
   },
   {
     n: "02",
-    title: "Submit confidential inputs",
-    body: "The allocation policy is composed in the browser and encrypted to the enclave's public key. Only a hash of the ciphertext is recorded on-chain.",
+    title: "Write the list privately",
+    body: "You list who gets what in your browser. It is encrypted before it leaves the page, and only a fingerprint of it goes on-chain.",
     figure: (
       <>
         <div className="redacted" style={{ marginTop: 0 }}>
@@ -42,8 +42,8 @@ const STEPS = [
   },
   {
     n: "03",
-    title: "Compute inside FCC",
-    body: "A Trusted Execution Environment decrypts the policy, applies the allocation rules, and builds a Merkle tree over the result. The operator cannot read either.",
+    title: "Sealed hardware does the maths",
+    body: "It opens the list, works out each share, and builds a proof. Whoever runs that machine cannot read any of it.",
     figure: (
       <>
         <div className="figure-enclave">
@@ -55,8 +55,8 @@ const STEPS = [
   },
   {
     n: "04",
-    title: "Verify the attestation",
-    body: "The enclave signs an aggregate — root, total, count — with its attested key. The contract recovers the signer; your browser recovers it again, independently.",
+    title: "The chain checks the signature",
+    body: "The hardware signs its answer with a key tied to the exact program it ran. The contract checks that signature before accepting anything.",
     figure: (
       <>
         <span className="figure-line" data-w="full" data-tone="pass" />
@@ -67,8 +67,8 @@ const STEPS = [
   },
   {
     n: "05",
-    title: "Execute settlement",
-    body: "Recipients prove their own entry against the root and claim. No allocation is ever published, and no recipient learns another's.",
+    title: "People claim their share",
+    body: "Each person proves their own entry and takes their money. Nobody learns anyone else's amount.",
     figure: (
       <>
         <div className="figure-dots">
