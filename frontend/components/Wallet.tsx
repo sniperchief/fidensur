@@ -22,6 +22,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useAccount, useChainId, useConnect, useDisconnect, useSwitchChain } from "wagmi";
 import type { Connector } from "wagmi";
 
@@ -103,7 +104,20 @@ function WalletPicker({ onClose }: { onClose: () => void }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  return (
+  // Rendered into `document.body` rather than in place.
+  //
+  // `.modal-backdrop` is `position: fixed`, which normally resolves against the viewport — but
+  // any ancestor with a `transform`, `filter` or `backdrop-filter` becomes the containing block
+  // for fixed descendants instead. The workspace topbar and the marketing header both use
+  // `backdrop-filter` for their frosted-glass effect, and this button sits inside them, so the
+  // dialog was being clipped to a 4rem-tall strip of the header. It opened; you just could not
+  // see it.
+  //
+  // A portal is the fix rather than removing the blur: the dialog should not be at the mercy of
+  // whatever styling the thing that triggered it happens to have.
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <div className="modal-backdrop" onClick={onClose} role="presentation">
       <div
         className="modal"
@@ -178,7 +192,8 @@ function WalletPicker({ onClose }: { onClose: () => void }) {
           Fidensur never sees your keys. Every transaction is built and signed in your browser.
         </p>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

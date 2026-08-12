@@ -55,7 +55,8 @@ const FINALIZED = 4;
 
 export default function OrgConsolePage() {
   return (
-    <main className="console">
+    // `div`, not `main`: AppShell supplies the page's single `main` landmark.
+    <div className="console">
       <h1>Organization console</h1>
       <p className="tagline">
         Compose an allocation privately, commit to it publicly, and let a TEE do the arithmetic.
@@ -71,7 +72,7 @@ export default function OrgConsolePage() {
           <Console contract={CONTRACT} />
         </RequireWallet>
       )}
-    </main>
+    </div>
   );
 }
 

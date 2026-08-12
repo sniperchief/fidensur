@@ -47,7 +47,8 @@ const FINALIZED = 4;
 
 export default function ClaimPage() {
   return (
-    <main className="console">
+    // `div`, not `main`: AppShell supplies the page's single `main` landmark.
+    <div className="console">
       <h1>Claim an allocation</h1>
       <p className="tagline">
         Ask the enclave what you were allocated, check the proof yourself, then spend it.
@@ -62,7 +63,7 @@ export default function ClaimPage() {
           <Portal contract={CONTRACT} />
         </RequireWallet>
       )}
-    </main>
+    </div>
   );
 }
 
