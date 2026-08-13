@@ -41,9 +41,24 @@ export interface ReportVerdict {
   passed: number;
   failed: number;
   unavailable: number;
-  overall: "verified" | "failed" | "partial";
+  /**
+   * `simulated` is a *kind* of failure, not an excuse for one.
+   *
+   * A report that renders "Not verified" identically whether the cause is a testnet enclave or a
+   * signature that does not match is accurate and useless — a reader skimming it assumes the
+   * system is broken and never reaches the reasoning. Splitting the two costs nothing in honesty:
+   * the check still failed, it is still counted as a failure, and the headline still refuses to
+   * say verified. It only names *which* failure.
+   *
+   * The split is narrow on purpose. It applies when the attestation is simulated **and** the
+   * extension id still matches its on-chain registration — a machine reporting the wrong
+   * extension is a genuine integrity problem and stays `failed`.
+   */
+  overall: "verified" | "failed" | "partial" | "simulated";
   headline: string;
   detail: string;
+  /** Extra context, currently only for the simulated case. */
+  note?: string;
 }
 
 export function deriveVerdict(input: {
@@ -158,25 +173,53 @@ export function deriveVerdict(input: {
   const failed = counted.filter((s) => s.state === "fail").length;
   const unavailable = counted.filter((s) => s.state === "unavailable").length;
 
+  // The attestation being simulated is the expected state of a testnet deployment, and is a
+  // different thing from a check that failed because something is wrong. A wrong extension id is
+  // not covered — that is a real mismatch and stays an outright failure.
+  const simulationOnly =
+    failed === 1 &&
+    enclave.state === "fail" &&
+    attestation?.isSimulatedCodeHash === true &&
+    attestation.matchesRegisteredExtension;
+
   // A failure outranks everything. An unverifiable check outranks a clean sweep of the rest —
   // "verified" has to mean every check ran, not every check that happened to be convenient.
-  const overall = failed > 0 ? "failed" : unavailable > 0 ? "partial" : "verified";
+  const overall =
+    failed > 0
+      ? simulationOnly
+        ? "simulated"
+        : "failed"
+      : unavailable > 0
+        ? "partial"
+        : "verified";
+
+  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
   const headline =
     overall === "verified"
       ? "Verified"
-      : overall === "failed"
-        ? "Not verified"
-        : "Partially verified";
-
-  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+      : overall === "simulated"
+        ? "Not verified — simulated enclave"
+        : overall === "failed"
+          ? "Not verified"
+          : "Partially verified";
 
   const detail =
     overall === "verified"
       ? "Every check this page can make passed."
-      : overall === "failed"
-        ? `${plural(failed, "check")} failed. Read the sections below before relying on this round.`
-        : `${plural(passed, "check")} passed; ${unavailable} could not be checked from here.`;
+      : overall === "simulated"
+        ? `Every cryptographic check passed. The one failure is the hardware itself: ` +
+          `attestation on this deployment is simulated, so genuine isolation cannot be established.`
+        : overall === "failed"
+          ? `${plural(failed, "check")} failed. Read the sections below before relying on this round.`
+          : `${plural(passed, "check")} passed; ${unavailable} could not be checked from here.`;
 
-  return { sections, passed, failed, unavailable, overall, headline, detail };
+  const note =
+    overall === "simulated"
+      ? "The enclave, the encryption and the signature are all real and all verified. What is " +
+        "missing is proof that the machine running them was hardware-isolated — which is a " +
+        "deployment configuration, not a change to any of the code above."
+      : undefined;
+
+  return { sections, passed, failed, unavailable, overall, headline, detail, note };
 }

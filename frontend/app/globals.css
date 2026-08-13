@@ -3188,7 +3188,8 @@ textarea.text-input {
   background: var(--fail);
 }
 
-.verdict-header[data-outcome="partial"]::before {
+.verdict-header[data-outcome="partial"]::before,
+.verdict-header[data-outcome="simulated"]::before {
   background: var(--warn);
 }
 
@@ -3249,10 +3250,24 @@ textarea.text-input {
   color: var(--fail);
 }
 
-.verdict-header[data-outcome="partial"] .verdict-mark-lg {
+.verdict-header[data-outcome="partial"] .verdict-mark-lg,
+.verdict-header[data-outcome="simulated"] .verdict-mark-lg {
   border-color: var(--warn-border);
   background: var(--warn-bg);
   color: var(--warn);
+}
+
+/* The sentence that stops a skim-reader concluding the system is broken. Sits below the verdict
+ * rather than beside it, so it is read second — after the outcome, before the tally. */
+.verdict-note {
+  margin: var(--s5) 0 0;
+  padding: var(--s4);
+  border: 1px solid var(--warn-border);
+  border-radius: var(--r);
+  background: var(--warn-bg);
+  color: var(--fg);
+  font-size: var(--fs-sm);
+  line-height: 1.6;
 }
 
 .verdict-headline {

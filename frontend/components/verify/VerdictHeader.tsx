@@ -16,7 +16,7 @@
  * cannot tell the green from the amber.
  */
 
-import { IconCheckAnimated, IconClose, IconLock } from "@/components/ui/Icons";
+import { IconCheckAnimated, IconChip, IconClose, IconLock } from "@/components/ui/Icons";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import type { ReportVerdict } from "@/lib/verdict";
 
@@ -40,11 +40,15 @@ export function VerdictHeader({
       </div>
 
       <div className="verdict-body">
+        {/* A cross means broken. A simulated enclave is not broken, it is unproven — so it gets
+            the hardware glyph and the amber treatment, not the red one. */}
         <span className="verdict-mark-lg" aria-hidden="true">
           {verdict.overall === "verified" ? (
             <IconCheckAnimated size={26} />
           ) : verdict.overall === "failed" ? (
             <IconClose size={24} />
+          ) : verdict.overall === "simulated" ? (
+            <IconChip size={24} />
           ) : (
             <IconLock size={22} />
           )}
@@ -55,6 +59,8 @@ export function VerdictHeader({
           <p className="verdict-detail">{verdict.detail}</p>
         </div>
       </div>
+
+      {verdict.note && <p className="verdict-note">{verdict.note}</p>}
 
       {/* The tally, so the headline can be audited against the sections without scrolling. */}
       <dl className="verdict-tally">
