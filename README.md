@@ -21,13 +21,13 @@ difference matters.
 | --- | --- | --- |
 | `docs/fcc-research.md` | Complete | Written from the Flare Developer Hub plus the `fce-extension-scaffold`, `fce-sign`, and `fce-weather-insurance` repos, cloned and read at the commits listed in §13 |
 | `docs/architecture.md` | Complete | — |
-| `contracts/` | Complete | **101 Forge tests passing** (`forge test`) |
+| `contracts/` | Complete | **102 Forge tests passing** (`forge test`) |
 | `extension/` (Go) | Complete | **`go build`, `go vet`, and 26 tests all passing** |
 | Go ↔ Solidity Merkle agreement | **Verified** | Go reproduces Solidity-generated leaf hashes and roots byte-for-byte |
 | `scripts/check-op-sync.sh` | Complete | Passing — identifiers agree across all three layers |
 | `scripts/{pre-build,start-services,post-build}.sh` | Complete | Syntax-checked; ⚠️ never run against a chain |
 | `extension/tools/cmd/register-extension` | Complete | Compiles and vets clean; ⚠️ never run against a chain |
-| `frontend/lib/*.ts` | Complete | **`tsc --noEmit` clean; 24 tests passing** |
+| `frontend/lib/*.ts` | Complete | **`tsc --noEmit` clean; 51 tests passing** (`npm test`) |
 | Browser verifier ↔ Solidity agreement | **Verified** | TypeScript reproduces the Solidity signature chain and recovers the same signer |
 | Verification explorer (`/verify`, `/verify/[round]`) | Complete | Every verdict derived from chain state and the live attestation report; signature recovered in the browser |
 | Organization console (`/org`) | Complete | **Drove a real round end to end in a browser** — create → fund → commit → compute → finalize |
@@ -40,7 +40,7 @@ difference matters.
 
 ### What is and is not proven
 
-**Proven by a passing test run** (151 tests: 101 Forge + 26 Go + 24 TypeScript):
+**Proven by a passing test run** (179 tests: 102 Forge + 26 Go + 51 TypeScript):
 
 - The contracts behave as specified, with negative cases for every threat in
   `docs/architecture.md` §9.1 — forged signatures, cross-chain replay, cross-round replay, relaying
