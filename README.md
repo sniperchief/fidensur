@@ -29,8 +29,11 @@ difference matters.
 | `extension/tools/cmd/register-extension` | Complete | Compiles and vets clean; ⚠️ never run against a chain |
 | `frontend/lib/*.ts` | Complete | **`tsc --noEmit` clean; 24 tests passing** |
 | Browser verifier ↔ Solidity agreement | **Verified** | TypeScript reproduces the Solidity signature chain and recovers the same signer |
-| `frontend/app/verify/[round]/page.tsx` | Complete | Type-checks clean |
-| Organization console / recipient portal UI | Not written | — |
+| Verification explorer (`/verify`, `/verify/[round]`) | Complete | Every verdict derived from chain state and the live attestation report; signature recovered in the browser |
+| Organization console (`/org`) | Complete | **Drove a real round end to end in a browser** — create → fund → commit → compute → finalize |
+| Recipient portal (`/claim`) | Complete | **A recipient disclosed and claimed in a browser**, Merkle proof re-verified client-side before spending |
+| Workspace dashboard (`/dashboard`) | Complete | Every figure read from `getRound()`. There is no mock-data module in this project |
+| Marketing site (`/`) | Complete | Illustrative figures only, labelled as illustrations in the UI |
 | `extension/Dockerfile` | Complete | **Reproducible across two independent CI runners** |
 | `docker-compose.yaml` | Written | ⚠️ Never run |
 | `.github/workflows/ci.yml` | Complete | **All 8 jobs green** |
@@ -77,11 +80,35 @@ difference matters.
 - **Deployed and registered on Coston2.** The contract is live, the extension is registered, and
   `setExtensionId()` has resolved. See [Live deployment](#live-deployment).
 
+- **A confidential round has run end to end — and then a browser did it.** Round 1 was computed by
+  the enclave and finalized on-chain via `scripts/test.sh` on 10 August 2026. A later round was
+  driven entirely through the web application: created, funded, committed, computed, finalized,
+  disclosed and claimed.
+
+  Those are two separate results and the second is not a formality. `scripts/test.sh` runs in Node,
+  **which does not enforce CORS at all**, so a green scripted run proved nothing about whether a
+  browser could reach the same proxy. Phase 6 of [`docs/deployment.md`](docs/deployment.md) exists
+  precisely because it could not, and the browser round is what closed it.
+
+- **ECIES interoperability with go-ethereum is confirmed.** The browser encrypted a policy and the
+  enclave decrypted it; the enclave encrypted a disclosure and the browser decrypted that. This was
+  assumption **A3** in `fcc-research.md`, and no self-test could ever have settled it — two
+  identically wrong implementations round-trip against each other perfectly.
+
 **Unproven:**
 
-- No confidential round has been computed end to end — that needs the TEE stack running, which is
-  blocked on Coston2 indexer credentials.
-- ECIES interoperability with go-ethereum (see [Known gaps](#known-gaps)).
+- **Attestation is simulated, and that is the one thing missing.** The enclave runs as an ordinary
+  container with `SIMULATED_TEE=true`, which Coston2 accepts. The program is real, the ECIES is
+  real, the Merkle tree is real, the signature is real and the contract really recovers it — but
+  the attestation report carries a placeholder platform string and a placeholder code hash instead
+  of a hardware measurement. Nothing here establishes that the machine was hardware-isolated, so
+  nothing here rules out the operator having read the policy.
+
+  Real attestation needs a GCP Confidential Space VM. It is a deployment configuration, not a
+  change to any code above.
+
+  The verification report checks for exactly this and reports **FAIL** on it, distinguishing a
+  simulated enclave from an integrity failure rather than collapsing the two into one word.
 
 ## Live deployment
 
@@ -90,7 +117,13 @@ difference matters.
 | Network | Coston2 (chain ID 114) |
 | Contract | [`0xF471169436d475917A63780EF13d9a4320c914b9`](https://coston2-explorer.flare.network/address/0xF471169436d475917A63780EF13d9a4320c914b9) |
 | Extension ID | 65818 (`0x1011a`) |
+| TEE machine | `0x84893f5D7D8FD55c6Ce834e45A41997E05C7B9F6` — `PRODUCTION`, simulated attestation |
+| Proxy (browser-reachable) | `https://206.72.199.199.nip.io` — Caddy on 443, forwarding to 6674 |
 | Attestation | Simulated — a real code hash needs a GCP Confidential Space VM |
+| Rounds settled | Round 1 via `scripts/test.sh`; a later round entirely through the browser |
+
+Full host setup, including the two problems that make a working deployment unusable from a browser,
+is in [`docs/deployment.md`](docs/deployment.md).
 
 ### A deployment hazard worth knowing about
 
@@ -109,15 +142,15 @@ TEE registration, with nothing linking it back to the duplicate.
 first-match order as the contract so the two cannot disagree. If you hit this on an older
 deployment, the fix is to set `EXTENSION_ID` to whatever `extensionId()` returns on-chain — that
 value is authoritative and cannot be changed.
-- **ECIES compatibility with go-ethereum is unconfirmed.** `frontend/lib/ecies.ts` implements the
-  scheme from a reading of go-ethereum's source, not a published spec. Its `selfTest()` proves
-  internal consistency, which is *not* the same as agreeing with Go — two identically wrong
-  implementations round-trip perfectly. Only encrypting in the browser and decrypting inside a live
-  extension settles it.
+### Two things no local test could have caught
 
-**Nothing here has been deployed to Coston2**, and a full end-to-end round is not currently possible
-regardless of local tooling — `ext-proxy` needs Coston2 indexer credentials that Flare issues only
-on request. See [Known gaps](#known-gaps).
+`frontend/lib/ecies.ts` implements go-ethereum's scheme from a reading of its source, and its
+`selfTest()` only proved internal consistency — two identically wrong implementations round-trip
+perfectly. And `ext-proxy` sends no `Access-Control-Allow-Origin` header, which Node does not care
+about, so the scripted end-to-end run passed against a proxy no browser could reach.
+
+Both were settled only by running a round from a browser. See
+[`docs/deployment.md`](docs/deployment.md) §6.
 
 ### Cross-implementation checks
 
@@ -167,12 +200,16 @@ independence into an actual check rather than an aspiration.
 | Allocation rules (weights, caps, bands) | ✗ | ✗ |
 | Policy commitment, Merkle root, total, recipient count | ✓ | ✓ |
 | TEE signature and attested code hash | ✓ | ✓ |
-| **An amount, once its recipient claims it** | ✓ | ✓ |
+| **A recipient's address *and* their amount, once they claim** | ✓ | ✓ |
 
-That last row is the honest caveat. **Claiming is self-disclosure** — an ERC-20 transfer of `N` to
-address `A` reveals that `A` received `N`. Fidensur keeps every *unclaimed* allocation private and
-never reveals the distribution as a whole, but it cannot make a settled payment invisible on an EVM
-chain. Anyone claiming otherwise for this class of system is wrong.
+That last row is the honest caveat. **Claiming is self-disclosure** — `AllocationClaimed` carries
+the recipient *and* the amount, and the transfer is visible regardless, so a claim publishes the
+triple: this address received this amount from this round.
+
+Until then a recipient does not appear on-chain at all — not their address, not their amount, not
+the fact they were included. The model is **invisible until you spend, then visible**, and the
+policy that decided the split is never published either way. This is not anonymity, and it does not
+survive the subtraction problem in [Known gaps](#known-gaps) §9.
 
 ---
 
@@ -216,10 +253,22 @@ extension/                        the Go FCC extension
     crypto.go                     ECIES decrypt (via node) / encrypt (local)
   pkg/types/                      wire types and ABI layouts
 
-test/                             100 Forge tests
+frontend/                         Next.js app — no backend, no API routes, nothing server-side
+  app/
+    page.tsx                      marketing site
+    dashboard/                    workspace overview + allocations, read from chain
+    org/                          organization console: create → fund → commit → compute → finalize
+    claim/                        recipient portal: disclose, re-verify the proof, claim
+    verify/                       public explorer; /verify/[round] is the report
+  lib/                            verify.ts (reimplements TeeResultVerifier.sol in the browser),
+                                  ecies.ts, merkle.ts, policy.ts, verdict.ts
+  components/                     design system, marketing sections, console, report
+
+test/                             Forge tests
 docs/
   fcc-research.md                 FCC knowledge base — read this first
   architecture.md                 design, trust model, threat model
+  deployment.md                   host setup, TEE registration, and the CORS layer
 ```
 
 ---
@@ -251,6 +300,28 @@ go mod tidy
 go build ./...
 go test ./...
 ```
+
+### Frontend
+
+```bash
+cd frontend
+npm install
+npm test          # verifier and policy tests
+npm run dev
+```
+
+Two environment values in `frontend/.env.local`, both public by nature — a contract address and a
+proxy URL, neither of which is a secret:
+
+```bash
+NEXT_PUBLIC_FIDENSUR_CONTRACT=0xF471169436d475917A63780EF13d9a4320c914b9
+NEXT_PUBLIC_EXT_PROXY_URL=https://206.72.199.199.nip.io
+```
+
+Without the proxy URL the app still reads the chain, but the confidential path is inert: `/org`
+cannot encrypt (it fetches the enclave's public key from there), `/claim` cannot request a
+disclosure, and `/verify` reports attestation as *unavailable* rather than treating a missing
+report as a pass.
 
 ---
 
@@ -313,9 +384,9 @@ production-ready, so this is a Coston2 application.
 Carried from [`docs/fcc-research.md`](docs/fcc-research.md) §11–12. Each is resolved by testing
 against a live deployment, not by reading more documentation.
 
-1. **ECIES parameters are assumed**, not documented — `go-ethereum`'s `ecies` over secp256k1. A
-   round-trip against the live extension is the acceptance test. If it fails, the fallback is a
-   public-commitment mode where the organization distributes proofs off-chain.
+1. ~~**ECIES parameters are assumed**, not documented.~~ **Resolved.** A browser-encrypted policy
+   was decrypted by the live extension, and an enclave-encrypted disclosure was decrypted by the
+   browser. The fallback public-commitment mode is not needed.
 2. **`submissionTag` is assumed to be `"submit"`.** It is a parameter to `finalizeRound`, so a wrong
    assumption is recoverable without redeploying.
 3. **Result polling is undocumented** — endpoint, shape, and latency. Isolated behind one module.
@@ -326,9 +397,21 @@ against a live deployment, not by reading more documentation.
    bit, so recovery is "re-run COMPUTE". The organization must retain its ciphertext.
 6. **Single-TEE routing.** `getRandomTeeIds(id, 1)` means one machine and one signature. Multi-TEE
    fan-out with a cosigner threshold is the obvious hardening step.
-7. **Indexer DB credentials are gated.** `ext-proxy` needs Coston2 indexer credentials, available
-   only on request from [Flare support](https://flare.network/resources/technical-support). Without
-   them the stack cannot run end to end, whatever else is installed.
+7. ~~**Indexer DB credentials are gated.**~~ **Resolved.** Credentials were issued and the stack
+   runs end to end. Anyone reproducing this deployment still needs to request them from
+   [Flare support](https://flare.network/resources/technical-support) before `ext-proxy` will see
+   any instructions.
+
+8. **`ext-proxy` sends no CORS headers**, so a browser can reach it only through a reverse proxy
+   that adds them. Not a Fidensur bug, but it makes an otherwise working deployment unusable from
+   the web application, and nothing in a Node-based test can detect it. Fixed here with Caddy —
+   [`docs/deployment.md`](docs/deployment.md) §6.
+
+9. **A round's remainder decays by subtraction.** Publishing `totalAllocated` alongside individual
+   claims means that once every recipient but one has claimed, the last allocation is exactly
+   known — published by other people's actions rather than its owner's. This is inherent: the total
+   is what makes the round auditable. The verification report states it on the page rather than
+   leaving it to be discovered.
 
 ---
 
